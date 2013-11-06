@@ -1,0 +1,5 @@
+using namespace std;
+using std::string;
+typedef unsigned int uint;
+
+uint hashKmer(const string);

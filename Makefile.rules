@@ -1,0 +1,18 @@
+SRC=../src
+CXX=/home/darryl/hdf5-1.8.11-linux-x86_64-shared/bin/h5c++ 
+CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -std=c++11
+LDFLAGS+=-L/home/darryl/lib -lz -lrt
+
+default: all
+all: build_kmer_matrix
+
+build_kmer_matrix: main.o
+	$(CXX) $(LDFLAGS) -o build_kmer_matrix main.o
+
+main.o: $(SRC)/main.cpp $(SRC)/mmio.c $(SRC)/mmio.h $(SRC)/lookup3.c
+	$(CXX) $(CXXFLAGS) -c -o main.o $(SRC)/main.cpp
+
+clean:
+	rm -f main.o main
+
+.PHONY: default all clean
