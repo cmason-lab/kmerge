@@ -39,11 +39,89 @@ class HashTest : public ::testing::Test {
   virtual void SetUp() {
     // Code here will be called immediately after the constructor (right
     // before each test).
+
+    const string kmer1("ACTGA");
+    const int kmer1_count = 4;
+    const string kmer2("ATCGT");
+    const int kmer2_count = 3;
+
+    uint kmer1_hash_val = hashKmer(kmer1);
+    uint kmer2_hash_val = hashKmer(kmer2);
+
+    const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/write.h5" );
+    const H5std_string DATASET_NAME( "test_write" );
+    hsize_t maxdims[2] = {H5S_UNLIMITED, H5S_UNLIMITED};
+    hsize_t chunk_dims[2] = {1, 2};
+    const int FSPACE_RANK = 2;
+    const int FSPACE_DIM1 = 2;
+    const int FSPACE_DIM2 = 2;
+
+    /*
+     * Create a file.
+     */
+
+    H5File* file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
+
+    /*                                                                                                                             
+     * Create property list for a dataset and set up fill values.                                                                                                                                                 
+     */
+
+    uint fillvalue = 0;   /* Fill value for the dataset */
+    DSetCreatPropList plist;
+    plist.setChunk(2, chunk_dims);
+    plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
+
+    /*                                                                                                                                                                                                                      
+     * Create dataspace for the dataset in the file.                                                                                                                                                                                        
+     */
+
+    hsize_t fdim[] = {FSPACE_DIM1, FSPACE_DIM2}; // dim sizes of ds (on disk)                                                                                                                                                                
+    DataSpace fspace( FSPACE_RANK, fdim, maxdims);
+
+    /*                                                                                                                                                                                                                               
+     * Create dataset and write it into the file.           
+     */
+
+
+    DataSet* dataset = new DataSet(file->createDataSet(DATASET_NAME, PredType::NATIVE_UINT, fspace, plist));
+
+    /* 
+     * Create dataspace for the first dataset.
+     */
+
+    hsize_t dim1[] = {FSPACE_DIM1, FSPACE_DIM2};
+
+    /* 
+     * Dimension size of the first dataset (in memory)  
+     */
+
+    DataSpace mspace1( FSPACE_RANK, dim1 );
+    uint vector[FSPACE_DIM1][FSPACE_DIM2];     
+
+    // vector buffer for dset                                                                                                                                                                        
+    vector[0][0] = kmer1_hash_val;
+    vector[0][1] = kmer1_count;
+    vector[1][0] = kmer2_hash_val;
+    vector[1][1] = kmer2_count;
+
+    dataset->write( vector, PredType::NATIVE_UINT, mspace1, fspace );
+
+    /*  
+     * Close the dataset and the file.     
+     */
+
+    delete dataset;
+    delete file;
+
   }
 
   virtual void TearDown() {
     // Code here will be called immediately after each test (right
     // before the destructor).
+
+    if (remove( "/home/darryl/Development/kmerge/tests/write.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
   }
 
   // Objects declared here can be used by all tests in the test case for Foo.
@@ -60,7 +138,7 @@ TEST_F(HashTest, HashKmerAndWriteToHDF5) {
   uint kmer2_hash_val = hashKmer(kmer2);
   EXPECT_EQ(612248635, kmer1_hash_val);
   EXPECT_EQ(2960106173, kmer2_hash_val);
-
+ 
   const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/write.h5" );
   const H5std_string DATASET_NAME( "test_write" );
   hsize_t maxdims[2] = {H5S_UNLIMITED, H5S_UNLIMITED};
@@ -68,61 +146,7 @@ TEST_F(HashTest, HashKmerAndWriteToHDF5) {
   const int FSPACE_RANK = 2;
   const int FSPACE_DIM1 = 2;
   const int FSPACE_DIM2 = 2;
-
-  /*
-   * Create a file.
-   */
-
-  H5File* file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
   
-  /*
-   * Create property list for a dataset and set up fill values.
-   */
-  
-  uint fillvalue = 0;   /* Fill value for the dataset */
-  DSetCreatPropList plist;
-  plist.setChunk(2, chunk_dims);
-  plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
-
-  /*
-   * Create dataspace for the dataset in the file.
-   */
-
-  hsize_t fdim[] = {FSPACE_DIM1, FSPACE_DIM2}; // dim sizes of ds (on disk)
-  DataSpace fspace( FSPACE_RANK, fdim, maxdims);
-
-  /*
-   * Create dataset and write it into the file.
-   */
-  
-  DataSet* dataset = new DataSet(file->createDataSet(DATASET_NAME, PredType::NATIVE_UINT, fspace, plist));
-
-  /*
-   * Create dataspace for the first dataset.
-   */
-
-  hsize_t dim1[] = {FSPACE_DIM1, FSPACE_DIM2};  
-  
-  /* 
-   * Dimension size of the first dataset (in memory) 
-   */
-  
-  DataSpace mspace1( FSPACE_RANK, dim1 );
-  uint vector[FSPACE_DIM1][FSPACE_DIM2];     // vector buffer for dset
-  vector[0][0] = kmer1_hash_val;
-  vector[0][1] = kmer1_count;
-  vector[1][0] = kmer2_hash_val;
-  vector[1][1] = kmer2_count;
-
-  dataset->write( vector, PredType::NATIVE_UINT, mspace1, fspace );
-
-  /*
-   * Close the dataset and the file.
-   */
-
-  delete dataset;
-  delete file;
-
 
   /*                                                                                                                                       
    * Open the specified file and the specified dataset in the file.                                                                            
@@ -168,7 +192,7 @@ TEST_F(HashTest, HashKmerAndAppendToHDF5) {
   /*      
    * Open the specified file and the specified dataset in the file.
    */
-  const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/append_to.h5" );
+  const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/write.h5" );
   const H5std_string DATASET_NAME( "test_write" );
 
   H5File in_file( FILE_NAME, H5F_ACC_RDWR );
@@ -235,8 +259,11 @@ TEST_F(HashTest, HashKmerAndAppendToHDF5) {
    * Read dataset back and display.                                                                                                                                                                              
    */
 
-  H5File in_file2( FILE_NAME, H5F_ACC_RDONLY );
-  DataSet in_dataset2 = in_file2.openDataSet( DATASET_NAME );
+  const H5std_string FILE_NAME2( "/home/darryl/Development/kmerge/tests/write.h5" );
+  const H5std_string DATASET_NAME2( "test_write" );
+
+  H5File in_file2( FILE_NAME2, H5F_ACC_RDONLY );
+  DataSet in_dataset2 = in_file2.openDataSet( DATASET_NAME2 );
 
   DataSpace file_space3 = in_dataset2.getSpace();
   DataSpace mem_space2(rank, size);
