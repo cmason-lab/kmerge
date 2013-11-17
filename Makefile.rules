@@ -1,7 +1,7 @@
 SRC=../src
 CXX=/home/darryl/hdf5-1.8.11-linux-x86_64-shared/bin/h5c++ 
 CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -std=c++11
-LDFLAGS+=-L/home/darryl/lib -lz -lrt
+LDFLAGS+=-L/home/darryl/lib -lz -lrt 
 
 default: all
 all: build_kmer_matrix

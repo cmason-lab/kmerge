@@ -1,4 +1,6 @@
 #include <string>
+#include "fq.h"
+
 using namespace std;
 typedef unsigned int uint;
 
