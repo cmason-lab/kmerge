@@ -105,8 +105,9 @@ class HashTestFixture  {
     /*  
      * Close the dataset and the file.     
      */
-
+    dataset->close();
     delete dataset;
+    file->close();
     delete file;
 
   }
@@ -115,16 +116,16 @@ class HashTestFixture  {
     // Code here will be called immediately after each test (right
     // before the destructor).
 
-    //if (remove( "/home/darryl/Development/kmerge/tests/example.h5" ) != 0) {
-    //  perror( "Error deleting file");
-    //}
+    if (remove( "/home/darryl/Development/kmerge/tests/example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
   }
 
   // Objects declared here can be used by all tests in the test case for Foo.
 };
 
 
-TEST_CASE_METHOD(HashTestFixture, "HashKmerAndWriteToHDF5", "[HashTest]") {
+TEST_CASE_METHOD(HashTestFixture, "ReadHDF5", "[HashTest]") {
   const string kmer1("ACTGA");
   const int kmer1_count = 4;
   const string kmer2("ATCGT");
@@ -137,11 +138,6 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndWriteToHDF5", "[HashTest]") {
  
   const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
   const H5std_string DATASET_NAME( "test_ds" );
-  //hsize_t maxdims[2] = {H5S_UNLIMITED, H5S_UNLIMITED};
-  //hsize_t chunk_dims[2] = {1, 2};
-  //const int FSPACE_RANK = 2;
-  //const int FSPACE_DIM1 = 2;
-  //const int FSPACE_DIM2 = 2;
   
 
   /*                                                                                                                                       
@@ -361,3 +357,92 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndFindVallue", "[HashTest]") {
   REQUIRE(data2 == 5);
 }
 
+TEST_CASE_METHOD(HashTestFixture, "HashKmerAndWriteToFixedHDF5", "[HDF5Test]") {
+  const string kmer1("ACTGA");
+  const int kmer1_count = 4;
+  const string kmer2("ATCGT");
+  const int kmer2_count = 3;
+
+  uint kmer1_hash_val = hashKmer(kmer1);
+  uint kmer2_hash_val = hashKmer(kmer2);
+
+  const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/fixed.h5" );
+  const H5std_string DATASET_NAME( "org1" );
+  const int FSPACE_RANK = 1;
+
+  /*
+   * Use chunking to allow the file size to grow as much as needed.
+   * Store matrix in sparse form. Main dataset will be organism with two groups underneath: kmer_hashes and hash_counts.
+   * kmer_hashes and hash_counts will exist at same coordinate in both groups
+   */
+
+
+  const uint FSPACE_DIM1 = (uint) pow(2,32)-1;
+  const int FSPACE_DIM2 = 1;
+
+  std::cout << (uint) pow(2,32)-1 << endl;
+  /*
+   * Create a file.
+   */
+
+  H5File* file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
+
+  /*                                                                                                                             
+   * Create property list for a dataset and set up fill values.                                                                           
+   */
+
+  uint fillvalue = 0;   /* Fill value for the dataset */
+  DSetCreatPropList plist;
+  plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
+
+  /*                                                                                                 
+   * Create dataspace for the dataset in the file.  
+   */
+
+  hsize_t fdim[] = {FSPACE_DIM1, FSPACE_DIM2}; // dim sizes of ds (on disk)                                       
+  DataSpace fspace( FSPACE_RANK, fdim);
+
+  /*                               
+   * Create dataset and write it into the file.           
+   */
+
+
+  DataSet* dataset = new DataSet(file->createDataSet(DATASET_NAME, PredType::NATIVE_UINT, fspace, plist));
+
+  /* 
+   * Create dataspace for the first dataset.
+   */
+
+  hsize_t dim1[] = {FSPACE_DIM1, FSPACE_DIM2};
+
+
+  /*
+   * Select hyperslab on file dataset.
+   */
+
+  hsize_t single_cell = 1;
+  DataSpace *file_space = new DataSpace( dataset->getSpace() ); 
+  DataSpace *mem_space = new DataSpace(1, &single_cell, NULL);
+
+
+  // overwrite data at value of kmer hash
+  hsize_t offset = kmer1_hash_val;
+  file_space->selectHyperslab(H5S_SELECT_SET, &single_cell, &offset);
+  uint val = kmer1_count;
+  dataset->write( &val, PredType::NATIVE_UINT, *mem_space, *file_space);
+
+
+  offset = kmer2_hash_val;
+  file_space->selectHyperslab(H5S_SELECT_SET, &single_cell, &offset);
+  val = kmer2_count;
+  dataset->write( &val, PredType::NATIVE_UINT, *mem_space, *file_space);
+
+  // TODO: Assert that counts are in the proper place in the hdf5 file 
+
+  /*  
+   * Close the dataset and the file.     
+   */
+
+  delete dataset;
+  delete file;
+}
