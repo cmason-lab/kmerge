@@ -43,74 +43,31 @@ class HashTestFixture  {
     const string kmer2("ATCGT");
     const int kmer2_count = 3;
 
-    uint kmer1_hash_val = hashKmer(kmer1);
-    uint kmer2_hash_val = hashKmer(kmer2);
+    uint kmer1_hash_val = KMerge::hashKmer(kmer1);
+    uint kmer2_hash_val = KMerge::hashKmer(kmer2);
 
-    const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
-    const H5std_string DATASET_NAME( "test_ds" );
-    hsize_t maxdims[2] = {H5S_UNLIMITED, H5S_UNLIMITED};
-    hsize_t chunk_dims[2] = {1, 2};
-    const int FSPACE_RANK = 2;
-    const int FSPACE_DIM1 = 2;
-    const int FSPACE_DIM2 = 2;
+    const H5std_string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
+    const H5std_string HASH_DATASET_NAME( "kmer_hash" );
+    const H5std_string COUNT_DATASET_NAME( "count" );
+    hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
+    const int DATA_SIZE = 2;
 
-    /*
-     * Create a file.
-     */
+    try {
+      KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
+      uint hashes[DATA_SIZE];
+      uint counts[DATA_SIZE];
+                                                                                                                                                                                                               
+      hashes[0] = kmer1_hash_val;
+      counts[0] = kmer1_count;
+      hashes[1] = kmer2_hash_val;
+      counts[1] = kmer2_count;
+      kmerge->addDatasetToHDF5File(HASH_DATASET_NAME, chunk_dims, DATA_SIZE, hashes);
+      kmerge->addDatasetToHDF5File(COUNT_DATASET_NAME, chunk_dims, DATA_SIZE, counts);
+      delete kmerge;
 
-    H5File* file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
-
-    /*                                                                                                                             
-     * Create property list for a dataset and set up fill values.                                                                           
-     */
-
-    uint fillvalue = 0;   /* Fill value for the dataset */
-    DSetCreatPropList plist;
-    plist.setChunk(2, chunk_dims);
-    plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
-
-    /*                                                                                                 
-     * Create dataspace for the dataset in the file.  
-     */
-
-    hsize_t fdim[] = {FSPACE_DIM1, FSPACE_DIM2}; // dim sizes of ds (on disk)                                       
-    DataSpace fspace( FSPACE_RANK, fdim, maxdims);
-
-    /*                               
-     * Create dataset and write it into the file.           
-     */
-
-
-    DataSet* dataset = new DataSet(file->createDataSet(DATASET_NAME, PredType::NATIVE_UINT, fspace, plist));
-
-    /* 
-     * Create dataspace for the first dataset.
-     */
-
-    hsize_t dim1[] = {FSPACE_DIM1, FSPACE_DIM2};
-
-    /* 
-     * Dimension size of the first dataset (in memory)  
-     */
-
-    DataSpace mspace1( FSPACE_RANK, dim1 );
-    uint vector[FSPACE_DIM1][FSPACE_DIM2];     
-
-    // vector buffer for dset                                                                                                                                                                        
-    vector[0][0] = kmer1_hash_val;
-    vector[0][1] = kmer1_count;
-    vector[1][0] = kmer2_hash_val;
-    vector[1][1] = kmer2_count;
-
-    dataset->write( vector, PredType::NATIVE_UINT, mspace1, fspace );
-
-    /*  
-     * Close the dataset and the file.     
-     */
-    dataset->close();
-    delete dataset;
-    file->close();
-    delete file;
+    } catch( FileIException error ) {
+      error.printError();
+    }
 
   }
 
@@ -133,8 +90,8 @@ TEST_CASE_METHOD(HashTestFixture, "ReadHDF5", "[HashTest]") {
   const string kmer2("ATCGT");
   const uint kmer2_count = 3;
 
-  uint kmer1_hash_val = hashKmer(kmer1);
-  uint kmer2_hash_val = hashKmer(kmer2);
+  uint kmer1_hash_val = KMerge::hashKmer(kmer1);
+  uint kmer2_hash_val = KMerge::hashKmer(kmer2);
   REQUIRE((uint) 612248635 == kmer1_hash_val);
   REQUIRE((uint) 2960106173 == kmer2_hash_val);
  
@@ -199,7 +156,7 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndAppendToHDF5", "[HashTest]") {
   hsize_t dimsext[2] = {nlines, ncols};
   uint vector[nlines][ncols];
   const string kmer_to_append("ACTGA");
-  uint kmer_to_append_hash_val = hashKmer(kmer_to_append);
+  uint kmer_to_append_hash_val = KMerge::hashKmer(kmer_to_append);
   vector[0][0] = kmer_to_append_hash_val;
   uint kmer_to_append_count = 2;
   vector[0][1] = kmer_to_append_count;
@@ -208,8 +165,8 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndAppendToHDF5", "[HashTest]") {
   const string kmer2("ATCGT");
   const uint kmer2_count = 3;
 
-  uint kmer1_hash_val = hashKmer(kmer1);
-  uint kmer2_hash_val = hashKmer(kmer2);
+  uint kmer1_hash_val = KMerge::hashKmer(kmer1);
+  uint kmer2_hash_val = KMerge::hashKmer(kmer2);
 
   /*
    * Get dimensions from the dataset to append to and create memory space.
@@ -283,7 +240,7 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndFindValue", "[HashTest]") {
   const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
   const H5std_string DATASET_NAME( "test_ds" );
   const string kmer("ATCGT");
-  uint hashed_kmer = hashKmer(kmer);
+  uint hashed_kmer = KMerge::hashKmer(kmer);
   const std::vector<double> hash_val (1, hashed_kmer);
   std::vector<uint64_t> coords;
 
@@ -369,8 +326,8 @@ TEST_CASE_METHOD(HashTestFixture, "HashKmerAndWriteToFixedHDF5", "[HDF5Test]") {
   const string kmer2("ATCGT");
   const int kmer2_count = 3;
 
-  uint kmer1_hash_val = 45232;//hashKmer(kmer1); /* Make value in unsigned short range */
-  uint kmer2_hash_val = 7532;//hashKmer(kmer2); /* Make value in unsigned short range */
+  uint kmer1_hash_val = 45232;//KMerge::hashKmer(kmer1); /* Make value in unsigned short range */
+  uint kmer2_hash_val = 7532;//KMerge::hashKmer(kmer2); /* Make value in unsigned short range */
 
   const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/fixed.h5" );
   const H5std_string DATASET_NAME( "org1" );
@@ -453,8 +410,8 @@ TEST_CASE("WriteSparseMatrixToHDF5AndReadFromAramdillo", "[SparseHDF5Test]") {
   const string kmer2("ATCGT");
   const uint kmer2_count = 3;
 
-  uint kmer1_hash_val = hashKmer(kmer1);
-  uint kmer2_hash_val = hashKmer(kmer2);
+  uint kmer1_hash_val = KMerge::hashKmer(kmer1);
+  uint kmer2_hash_val = KMerge::hashKmer(kmer2);
 
   const H5std_string FILE_NAME( "/home/darryl/Development/kmerge/tests/sparse.h5" );
   const H5std_string GROUP_NAME( "/org1" );
@@ -481,6 +438,7 @@ TEST_CASE("WriteSparseMatrixToHDF5AndReadFromAramdillo", "[SparseHDF5Test]") {
   DSetCreatPropList plist;
   plist.setChunk(1, &chunk_dims);
   plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
+  plist.setDeflate( KMerge::GZIP_BEST_COMPRESSION );
 
   /*                                                                                                 
    * Create dataspace for the dataset in the file.  
