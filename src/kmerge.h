@@ -19,6 +19,7 @@ typedef unsigned int uint;
 
 class KMerge {
  private:
+  H5std_string file_name;
   H5File *file;
 
  public:
@@ -28,7 +29,10 @@ class KMerge {
   KMerge(const H5std_string&);
   ~KMerge();
   static uint hashKmer(const std::string&);
-  bool addDatasetToHDF5File(const H5std_string&, const hsize_t*, const hsize_t, const uint*);
+  bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
+  std::vector<uint> getDatasetFromHDF5File(const H5std_string&);
+  bool addDatasetToHDF5File(const H5std_string&, const H5std_string&, const hsize_t, const uint*, const bool);
+  bool parseKmerCountsFile(const std::string&, std::vector<uint>&, std::vector<uint>&);
   bool appendToDataset(void);
   bool updateDataset(void);
   uint * getDatasetValues(void);

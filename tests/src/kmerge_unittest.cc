@@ -26,17 +26,14 @@ using namespace H5;
 
 // The fixture for testing class k-mer hashing.
 class HashTestFixture  {
- public:
-  // You can remove any or all of the following functions if its body
-  // is empty.
 
-  // If the constructor and destructor are not enough for setting up
-  // and cleaning up each test, you can define the following methods:
+
+ public:
   
+  KMerge* kmerge;
 
   HashTestFixture() {
-    // Code here will be called immediately after the constructor (right
-    // before each test).
+
 
     const string kmer1("ACTGA");
     const int kmer1_count = 4;
@@ -47,25 +44,33 @@ class HashTestFixture  {
     uint kmer2_hash_val = KMerge::hashKmer(kmer2);
 
     const H5std_string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
-    const H5std_string HASH_DATASET_NAME( "kmer_hash" );
-    const H5std_string COUNT_DATASET_NAME( "count" );
-    hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
+    const H5std_string GROUP_NAME( "/org1" );
+    const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
+    const H5std_string COUNT_DATASET_NAME( "/org1/count" );
 
     try {
-      KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
+      this->kmerge = new KMerge(HDF5_FILE_NAME);
       std::vector<uint> hashes;
       std::vector<uint> counts;
-                                                                                                                                                                                                               
-      hashes.push_back(kmer1_hash_val);
-      counts.push_back(kmer1_count);
-      hashes.push_back(kmer2_hash_val);
-      counts.push_back(kmer2_count);
-      kmerge->addDatasetToHDF5File(HASH_DATASET_NAME, chunk_dims, hashes.size(), &hashes[0]);
-      kmerge->addDatasetToHDF5File(COUNT_DATASET_NAME, chunk_dims, counts.size(), &counts[0]);
-      delete kmerge;
+                                                                                                                                 
+      kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer1), kmer1_count);
+      kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer2), kmer2_count);
+      kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
+      kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
 
-    } catch( FileIException error ) {
+    } 
+    catch( FileIException error ) {
       error.printError();
+    }
+
+    // catch failure caused by the DataSet operations
+    catch( DataSetIException error ) {
+	error.printError();
+    }
+
+    // catch failure caused by the DataSpace operations
+    catch( DataSpaceIException error ) {
+	error.printError();
     }
 
   }
@@ -73,6 +78,8 @@ class HashTestFixture  {
   virtual ~HashTestFixture() {
     // Code here will be called immediately after each test (right
     // before the destructor).
+
+    delete this->kmerge;
 
     if (remove( "/home/darryl/Development/kmerge/tests/example.h5" ) != 0) {
       perror( "Error deleting file");
@@ -82,20 +89,207 @@ class HashTestFixture  {
   // Objects declared here can be used by all tests in the test case for Foo.
 };
 
-TEST_CASE_METHOD(HashTestFixture, "HashKmerAndAppendToHDF5", "[HashTest]") {
-  /*
+//TEST_CASE_METHOD(HashTestFixture, "HashKmerAndAppendToHDF5", "[HashTest]") {
+  /* TODO:
    * New Implementation:
    * Extract hashes and counts for the group for which data is to be appended. Store each in a 
    * vector. Search the hashes vector for each hash to add. If its not there, add it at the end
    * and add count at the end of the counts vector. If it is there, add the count to the hashes
    * previous count. When all counts have been processed, write the data back to the HDF5 file
    * (either overwrite previous data or write new data and remove previous data).
-   *
    */
 
-}
 
-TEST_CASE_METHOD(HashTestFixture, "ParseKmerCounts", "[HashTest]") {
+  //const string kmer1("ACTGA");
+  //const int kmer1_count = 4;
+  //const string kmer2("ATCGT");
+  //const int kmer2_count = 3;
+  //const string kmer3("ACTCA");
+  //const int kmer3_count = 1;
+  //const string kmer4("ATTTT");
+  //const int kmer4_count = 2;
+
+  //const H5std_string GROUP_NAME( "/org1" );
+  //const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
+  //const H5std_string COUNT_DATASET_NAME( "/org1/count" );
+ 
+
+  //std::vector<uint> hashes = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
+  //std::vector<uint> counts = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
+
+  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer1), kmer1_count);
+  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer2), kmer2_count);
+  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer3), kmer3_count);
+  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer4), kmer4_count);
+  /* Going to need to append data which has a hash already in the dataset and
+   * add new hash for those which do not for any updates to the k-mer composition of a genome.
+   * This is not neccessary when writing a dataset to the file the first time.
+   */ 
+  //kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], false);
+  //kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
+
+
+  //hashes.clear();
+  //counts.clear();
+
+  //REQUIRE(hashes.empty() == true);
+  //REQUIRE(counts.empty() == true);
+
+  //hashes = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
+  //counts = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
+
+  //REQUIRE(hashes.size() == counts.size());
+  //REQUIRE(hashes.size() == 4);
+
+  //uint pos;
+  //std::vector<uint>::iterator iter;
+
+  //pos = 0;
+  //for (std::vector<uint>::iterator iter=hashes.begin(); iter!=hashes.end(); iter++) {
+  //  if (*iter==KMerge::hashKmer(kmer1)) {
+  //    break;
+  //  }
+  //  pos++;
+  //}
+
+  //REQUIRE(iter != hashes.end());
+  //REQUIRE(counts[pos] == kmer1_count);
+
+  //pos = 0;
+  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
+  //  if (*iter==KMerge::hashKmer(kmer2)) {
+  //    break;
+  //  }
+  //  pos++;
+  //}
+
+  //REQUIRE(iter != hashes.end());
+  //REQUIRE(counts[pos] == kmer2_count);
+
+  //pos = 0;
+  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
+  //  if (*iter==KMerge::hashKmer(kmer3)) {
+  //    break;
+  //  }
+  //  pos++;
+  //}
+
+  //REQUIRE(iter != hashes.end());
+  //REQUIRE(counts[pos] == kmer3_count);
+
+  //pos = 0;
+  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
+  //  if (*iter==KMerge::hashKmer(kmer4)) {
+  //    break;
+  //  }
+  //  pos++;
+  //}
+
+  //REQUIRE(iter != hashes.end());
+  //REQUIRE(counts[pos] == kmer4_count);
+
+//}
+
+TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
+  std::vector<uint> hashes;
+  std::vector<uint> counts;
+
+  const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/sample_kmer_counts.txt");
+
+  const H5std_string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/parse_example.h5" );
+  const H5std_string GROUP_NAME( "/org1" );
+  const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
+  const H5std_string COUNT_DATASET_NAME( "/org1/count" );
+  std::vector<uint>::iterator iter;
+
+
+  try {
+    KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
+  
+    bool success = kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashes, counts);
+    REQUIRE(success == true);
+
+    REQUIRE(hashes.size() == 2);
+    REQUIRE(counts.size() == 2);
+
+    const string kmer1("ACTGA");
+    const uint kmer1_count = 4;
+    const string kmer2("ATCGT");
+    const uint kmer2_count = 5;
+
+
+    REQUIRE(hashes[0] == KMerge::hashKmer(kmer1));
+    REQUIRE(hashes[1] == KMerge::hashKmer(kmer2));
+    REQUIRE(counts[0] == kmer1_count);
+    REQUIRE(counts[1] == kmer2_count);
+  
+    kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
+    kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
+
+
+    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);                                                                                                                        
+    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
+
+    
+  
+    REQUIRE(hashes2.size() == 2);
+    REQUIRE(counts2.size() == 2);
+
+
+    uint pos = 0; 
+    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
+      if (*iter==KMerge::hashKmer(kmer1)) {      
+	break;
+      }                                                                                                                                                                                               
+      pos++;                                                                                                                                                              
+    }
+    REQUIRE(iter != hashes2.end());
+    REQUIRE(counts2[pos] == kmer1_count);
+
+    pos = 0;
+    
+    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
+      if (*iter==KMerge::hashKmer(kmer2)) {
+	break;
+      }
+      pos++;
+    }
+
+    REQUIRE(iter != hashes2.end());
+    REQUIRE(counts2[pos] == kmer2_count);
+
+
+    if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+
+    
+  }    
+  catch( FileIException error ) {
+    error.printError();
+    cout << "File error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
+
+  // catch failure caused by the DataSet operations 
+  catch( DataSetIException error ) {
+    error.printError();
+    cout << "Dataset error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
+
+  // catch failure caused by the DataSpace operations 
+  catch( DataSpaceIException error ) {
+    error.printError();
+    cout << "Dataspace error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
 }
 
 

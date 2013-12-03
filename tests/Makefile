@@ -8,10 +8,13 @@ PROGRAM_SRC_DIR = $(HOME_DIR)/Development/kmerge/src
 # the compiler doesn't generate warnings in Google Test headers.
 CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR)
 
+CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/core/include
+CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
+
 #OPT = -O2
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) 
+CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
