@@ -1,2 +1,5 @@
 *~
 *.o
+tests/sandbox/
+debug/kmerge
+release/kmerge

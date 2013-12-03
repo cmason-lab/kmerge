@@ -1,18 +1,24 @@
-SRC=../src
-CXX=/home/darryl/hdf5-1.8.11-linux-x86_64-shared/bin/h5c++ 
-CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -std=c++11
-LDFLAGS+=-L/home/darryl/lib -lz -lrt 
+SRC=/home/darryl/Development/kmerge/src
+HOME_DIR=/home/darryl
+CXX=/home/darryl/hdf5/bin/h5c++ 
+CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros 
+LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz
+CXXFLAGS += -I $(HOME_DIR)/include -I $(HOME_DIR)/hdf5/include -D_NOMPI
+CXXFLAGS += -I $(HOME_DIR)/Development/include -I $(HOME_DIR)/Development/seqan-trunk/core/include -I $(HOME_DIR)/Development/seqan-trunk/extras/include
 
 default: all
-all: build_kmer_matrix
+all: kmerge
 
-build_kmer_matrix: main.o
-	$(CXX) $(LDFLAGS) -o build_kmer_matrix main.o
+kmerge: main.o
+	$(CXX) $(LDFLAGS) main.o kmerge.o -o kmerge
 
-main.o: $(SRC)/main.cpp $(SRC)/mmio.c $(SRC)/mmio.h $(SRC)/lookup3.c
-	$(CXX) $(CXXFLAGS) -c -o main.o $(SRC)/main.cpp
+main.o: kmerge.o $(SRC)/main.cc
+	$(CXX) $(CXXFLAGS) kmerge.o -c $(SRC)/main.cc $(LDFLAGS)
+
+kmerge.o: $(SRC)/kmerge.h $(SRC)/kmerge.cc
+	$(CXX) $(CXXFLAGS) -c $(SRC)/kmerge.cc $(LDFLAGS)
 
 clean:
-	rm -f main.o main
+	rm -f main.o main kmerge.o kmerge
 
 .PHONY: default all clean

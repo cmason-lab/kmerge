@@ -89,112 +89,100 @@ class HashTestFixture  {
   // Objects declared here can be used by all tests in the test case for Foo.
 };
 
-//TEST_CASE_METHOD(HashTestFixture, "HashKmerAndAppendToHDF5", "[HashTest]") {
-  /* TODO:
-   * New Implementation:
-   * Extract hashes and counts for the group for which data is to be appended. Store each in a 
-   * vector. Search the hashes vector for each hash to add. If its not there, add it at the end
-   * and add count at the end of the counts vector. If it is there, add the count to the hashes
-   * previous count. When all counts have been processed, write the data back to the HDF5 file
-   * (either overwrite previous data or write new data and remove previous data).
-   */
+TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
+  std::vector<uint> hashes;
+  std::vector<uint> counts;
+
+  const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/k3.counts.gz");
+
+  const H5std_string GROUP_NAME( "/org2" );
+  const H5std_string HASH_DATASET_NAME( "/org2/kmer_hash" );
+  const H5std_string COUNT_DATASET_NAME( "/org2/count" );
+  std::vector<uint>::iterator iter;
+
+  try {
+
+    bool success = this->kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashes, counts);
+    REQUIRE(success == true);
+
+    REQUIRE(hashes.size() == 64);
+    REQUIRE(counts.size() == 64);
+
+    const string kmer0("AAA");
+    const string kmer63("TTT");
+    const uint kmer0_count = 95944;
+    const uint kmer63_count = 99230;
+
+    REQUIRE(hashes[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts[0] == kmer0_count);
+    REQUIRE(counts[63] == kmer63_count);
+
+    this->kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
+    this->kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
 
 
-  //const string kmer1("ACTGA");
-  //const int kmer1_count = 4;
-  //const string kmer2("ATCGT");
-  //const int kmer2_count = 3;
-  //const string kmer3("ACTCA");
-  //const int kmer3_count = 1;
-  //const string kmer4("ATTTT");
-  //const int kmer4_count = 2;
-
-  //const H5std_string GROUP_NAME( "/org1" );
-  //const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
-  //const H5std_string COUNT_DATASET_NAME( "/org1/count" );
- 
-
-  //std::vector<uint> hashes = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
-  //std::vector<uint> counts = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
-
-  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer1), kmer1_count);
-  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer2), kmer2_count);
-  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer3), kmer3_count);
-  //kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer4), kmer4_count);
-  /* Going to need to append data which has a hash already in the dataset and
-   * add new hash for those which do not for any updates to the k-mer composition of a genome.
-   * This is not neccessary when writing a dataset to the file the first time.
-   */ 
-  //kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], false);
-  //kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
+    std::vector<uint> hashes2 = this->kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
+    std::vector<uint> counts2 = this->kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
 
 
-  //hashes.clear();
-  //counts.clear();
 
-  //REQUIRE(hashes.empty() == true);
-  //REQUIRE(counts.empty() == true);
+    REQUIRE(hashes2.size() == 64);
+    REQUIRE(counts2.size() == 64);
 
-  //hashes = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
-  //counts = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
 
-  //REQUIRE(hashes.size() == counts.size());
-  //REQUIRE(hashes.size() == 4);
+    uint pos = 0;
+    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
+      if (*iter==KMerge::hashKmer(kmer0)) {
+        break;
+      }
+      pos++;
+    }
+    REQUIRE(iter != hashes2.end());
+    REQUIRE(counts2[pos] == kmer0_count);
 
-  //uint pos;
-  //std::vector<uint>::iterator iter;
+    pos = 0;
 
-  //pos = 0;
-  //for (std::vector<uint>::iterator iter=hashes.begin(); iter!=hashes.end(); iter++) {
-  //  if (*iter==KMerge::hashKmer(kmer1)) {
-  //    break;
-  //  }
-  //  pos++;
-  //}
+    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
+      if (*iter==KMerge::hashKmer(kmer63)) {
+        break;
+      }
+      pos++;
+    }
 
-  //REQUIRE(iter != hashes.end());
-  //REQUIRE(counts[pos] == kmer1_count);
+    REQUIRE(iter != hashes2.end());
+    REQUIRE(counts2[pos] == kmer63_count);
 
-  //pos = 0;
-  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
-  //  if (*iter==KMerge::hashKmer(kmer2)) {
-  //    break;
-  //  }
-  //  pos++;
-  //}
+    REQUIRE(counts == counts2);
+    REQUIRE(hashes == hashes2);
 
-  //REQUIRE(iter != hashes.end());
-  //REQUIRE(counts[pos] == kmer2_count);
 
-  //pos = 0;
-  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
-  //  if (*iter==KMerge::hashKmer(kmer3)) {
-  //    break;
-  //  }
-  //  pos++;
-  //}
+  }
+  catch( FileIException error ) {
+    error.printError();
+    cout << "File error" << std::endl;
+  }
 
-  //REQUIRE(iter != hashes.end());
-  //REQUIRE(counts[pos] == kmer3_count);
+  // catch failure caused by the DataSet operations                                                                                                                                                                  
+  catch( DataSetIException error ) {
+    error.printError();
+    cout << "Dataset error" << std::endl;
+  }
 
-  //pos = 0;
-  //for (iter=hashes.begin(); iter!=hashes.end(); iter++) {
-  //  if (*iter==KMerge::hashKmer(kmer4)) {
-  //    break;
-  //  }
-  //  pos++;
-  //}
+  // catch failure caused by the DataSpace operations                                                                                                                                                                
+  catch( DataSpaceIException error ) {
+    error.printError();
+    cout << "Dataspace error" << std::endl;
+  }
 
-  //REQUIRE(iter != hashes.end());
-  //REQUIRE(counts[pos] == kmer4_count);
 
-//}
+}
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
   std::vector<uint> counts;
 
-  const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/sample_kmer_counts.txt");
+  const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/k3.counts.gz");
 
   const H5std_string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/parse_example.h5" );
   const H5std_string GROUP_NAME( "/org1" );
@@ -209,20 +197,22 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     bool success = kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashes, counts);
     REQUIRE(success == true);
 
-    REQUIRE(hashes.size() == 2);
-    REQUIRE(counts.size() == 2);
-
-    const string kmer1("ACTGA");
-    const uint kmer1_count = 4;
-    const string kmer2("ATCGT");
-    const uint kmer2_count = 5;
 
 
-    REQUIRE(hashes[0] == KMerge::hashKmer(kmer1));
-    REQUIRE(hashes[1] == KMerge::hashKmer(kmer2));
-    REQUIRE(counts[0] == kmer1_count);
-    REQUIRE(counts[1] == kmer2_count);
-  
+    REQUIRE(hashes.size() == 64);
+    REQUIRE(counts.size() == 64);
+
+    const string kmer0("AAA");
+    const string kmer63("TTT");
+    const uint kmer0_count = 95944;
+    const uint kmer63_count = 99230;
+
+
+    REQUIRE(hashes[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts[0] == kmer0_count);
+    REQUIRE(counts[63] == kmer63_count);
+    
     kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
     kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
 
@@ -232,32 +222,34 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     
   
-    REQUIRE(hashes2.size() == 2);
-    REQUIRE(counts2.size() == 2);
+    REQUIRE(hashes2.size() == 64);
+    REQUIRE(counts2.size() == 64);
 
-
+    
     uint pos = 0; 
     for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
-      if (*iter==KMerge::hashKmer(kmer1)) {      
+      if (*iter==KMerge::hashKmer(kmer0)) {      
 	break;
       }                                                                                                                                                                                               
       pos++;                                                                                                                                                              
     }
     REQUIRE(iter != hashes2.end());
-    REQUIRE(counts2[pos] == kmer1_count);
+    REQUIRE(counts2[pos] == kmer0_count);
 
     pos = 0;
     
     for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
-      if (*iter==KMerge::hashKmer(kmer2)) {
+      if (*iter==KMerge::hashKmer(kmer63)) {
 	break;
       }
       pos++;
     }
 
     REQUIRE(iter != hashes2.end());
-    REQUIRE(counts2[pos] == kmer2_count);
+    REQUIRE(counts2[pos] == kmer63_count);
 
+    REQUIRE(counts == counts2);
+    REQUIRE(hashes == hashes2);
 
     if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
       perror( "Error deleting file");

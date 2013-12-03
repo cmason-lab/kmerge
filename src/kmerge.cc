@@ -82,14 +82,13 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
   /*                              
    * Create property list for a dataset and set up fill values. 
    */
-
+  uint rank = 2;
   uint fillvalue = 0;   /* Fill value for the dataset */
   DSetCreatPropList plist;
-  hsize_t max_dims[2] = {H5S_UNLIMITED, H5S_UNLIMITED};
+  hsize_t max_dims[2] = {H5S_UNLIMITED, 1};
   Group* group = NULL;
   hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
-
-  plist.setChunk(2, chunk_dims);
+  plist.setChunk(rank, chunk_dims);
   plist.setFillValue(PredType::NATIVE_UINT, &fillvalue);
   plist.setDeflate( KMerge::GZIP_BEST_COMPRESSION );
 
@@ -97,7 +96,6 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
    * Create dataspace for the dataset                   
    */
   const hsize_t data_dims[2] = {data_size, 1}; 
-  uint rank = (data_dims[ROW_SIZE] > data_dims[COL_SIZE]) ? data_dims[ROW_SIZE]:data_dims[COL_SIZE];
                                                                                                      
   DataSpace file_space( rank, data_dims, max_dims);
 
@@ -106,7 +104,7 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
    */
 
   if (create_group) {
-    group = new Group( this->file->createGroup( "/org1" ));
+    group = new Group( this->file->createGroup( group_name ));
   }
 
 
@@ -114,7 +112,7 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
    * Create dataset and write it into the file.                        
    */
 
-  DataSpace mem_space( rank, data_dims );
+  DataSpace mem_space( rank, data_dims, max_dims );
 
   DataSet* dataset = new DataSet( file->createDataSet(ds_name, PredType::NATIVE_UINT, file_space, plist));
   dataset->write( data, PredType::NATIVE_UINT, mem_space, file_space );

@@ -1,6 +1,7 @@
 #include <string>
+#include <vector>
+#include <iostream>
 #include "H5Cpp.h"
-#include "fq.h"
 
 #ifndef H5_NO_NAMESPACE
 #ifndef H5_NO_STD
@@ -10,11 +11,12 @@ using std::string;
 #endif  // H5_NO_STD                                                                                                                                                                                                                          
 #endif
 
+using namespace std;
+
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
 #endif
 
-using namespace std;
 typedef unsigned int uint;
 
 class KMerge {
