@@ -12,6 +12,8 @@ using namespace std;
 #define ROW_SIZE 0
 #define COL_SIZE 1
 
+pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
+
 KMerge::KMerge (const H5std_string& file_name) {
   this->file_name = file_name;
 }
@@ -179,6 +181,16 @@ std::vector<uint> KMerge::getDatasetFromHDF5File(const H5std_string& ds_name) {
 
 
   return data;
+}
+
+void* KMerge::parseAndWriteInThread(void* arg) {
+  param_struct * params = (param_struct*) arg;
+  params->kmerge->parseKmerCountsFile(params->kmer_count_file_name, params->hashes, params->counts);
+  pthread_mutex_lock( &KMerge::mutex );
+  params->kmerge->addDatasetToHDF5File(params->group_name, params->hash_dataset_name, params->hashes.size(), &params->hashes[0], true);
+  params->kmerge->addDatasetToHDF5File(params->group_name, params->count_dataset_name, params->counts.size(), &params->counts[0], false);
+  pthread_mutex_unlock( &KMerge::mutex );
+  return (void*) params;
 }
 
 KMerge::~KMerge () {

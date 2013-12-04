@@ -14,7 +14,7 @@ CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
 #OPT = -O2
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1
+CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -pthread
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.

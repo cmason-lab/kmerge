@@ -8,6 +8,8 @@
 #include "indexBuilder.h"
 #include "catch.hpp"
 #include "armadillo"
+#include <pthread.h>
+
 
 using namespace arma;
 
@@ -22,7 +24,6 @@ using namespace arma;
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
 #endif
-
 
 // The fixture for testing class k-mer hashing.
 class HashTestFixture  {
@@ -282,6 +283,174 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
       perror( "Error deleting file");
     }
   }
+}
+
+TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
+  std::vector<uint> hashes;
+  std::vector<uint> counts;
+
+  param_struct params1;
+  param_struct params2;
+  param_struct params3;
+
+  params1.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/15660/k3.counts.gz";
+  params2.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/165199/k3.counts.gz";
+  params3.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/29309/k3.counts.gz";
+
+  params1.hdf5_file_name =  "/home/darryl/Development/kmerge/tests/thread_example.h5";
+  params2.hdf5_file_name = params1.hdf5_file_name;
+  params3.hdf5_file_name = params2.hdf5_file_name;
+
+  params1.group_name =  "/15660";
+  params2.group_name = "/165199";
+  params3.group_name ="/29309";
+
+  params1.hash_dataset_name =  "/15660/kmer_hash";
+  params1.count_dataset_name = "/15660/count";
+
+  params2.hash_dataset_name = "/165199/kmer_hash";
+  params2.count_dataset_name = "/165199/count";
+
+  params3.hash_dataset_name = "/29309/kmer_hash";
+  params3.count_dataset_name = "/29309/count";
+
+  uint thread_count = 3;
+
+  pthread_t* threads = new pthread_t[thread_count];
+
+
+  std::vector<uint>::iterator iter;
+
+  try {
+    KMerge* kmerge = new KMerge(params1.hdf5_file_name);
+
+    params1.kmerge = kmerge;
+    params2.kmerge = kmerge;
+    params3.kmerge = kmerge;
+
+    int ret1 = pthread_create(&threads[0], NULL, &KMerge::parseAndWriteInThread, (void*) &params1 );
+    int ret2 = pthread_create(&threads[1], NULL, &KMerge::parseAndWriteInThread, (void*) &params2 );
+    int ret3 = pthread_create(&threads[2], NULL, &KMerge::parseAndWriteInThread, (void*) &params3 );
+
+    pthread_join( threads[0], NULL);
+    pthread_join( threads[1], NULL);
+    pthread_join( threads[2], NULL);
+
+
+    REQUIRE(ret1 == 0);
+    REQUIRE(ret2 == 0);
+    REQUIRE(ret3 == 0);
+
+
+    REQUIRE(params1.hashes.size() == 64);
+    REQUIRE(params1.counts.size() == 64);
+    REQUIRE(params2.hashes.size() == 64);
+    REQUIRE(params2.counts.size() == 64);
+    REQUIRE(params3.hashes.size() == 64);
+    REQUIRE(params3.counts.size() == 64);
+
+    const string kmer0("AAA");
+    const string kmer63("TTT");
+    uint kmer0_count = 85060;
+    uint kmer63_count = 85174;
+
+
+    REQUIRE(params1.hashes[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(params1.hashes[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(params1.counts[0] == kmer0_count);
+    REQUIRE(params1.counts[63] == kmer63_count);
+
+    kmer0_count = 65798;
+    kmer63_count = 65803;
+
+
+    REQUIRE(params2.hashes[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(params2.hashes[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(params2.counts[0] == kmer0_count);
+    REQUIRE(params2.counts[63] == kmer63_count);
+
+    kmer0_count = 95944;
+    kmer63_count = 99230;
+
+
+    REQUIRE(params3.hashes[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(params3.hashes[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(params3.counts[0] == kmer0_count);
+    REQUIRE(params3.counts[63] == kmer63_count);
+
+
+    std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File(params1.hash_dataset_name);
+    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File(params2.hash_dataset_name);
+    std::vector<uint> hashes3 = kmerge->getDatasetFromHDF5File(params3.hash_dataset_name);
+
+    std::vector<uint> counts1 = kmerge->getDatasetFromHDF5File(params1.count_dataset_name);
+    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File(params2.count_dataset_name);
+    std::vector<uint> counts3 = kmerge->getDatasetFromHDF5File(params3.count_dataset_name);
+
+
+    kmer0_count = 85060;
+    kmer63_count = 85174;
+
+
+    REQUIRE(hashes1[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes1[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts1[0] == kmer0_count);
+    REQUIRE(counts1[63] == kmer63_count);
+
+
+    kmer0_count = 65798;
+    kmer63_count = 65803;
+
+
+    REQUIRE(hashes2[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes2[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts2[0] == kmer0_count);
+    REQUIRE(counts2[63] == kmer63_count);
+
+
+    kmer0_count = 95944;
+    kmer63_count = 99230;
+
+
+    REQUIRE(hashes3[0] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes3[63] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts3[0] == kmer0_count);
+    REQUIRE(counts3[63] == kmer63_count);
+
+
+    if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+
+    delete kmerge;
+  }
+  catch( FileIException error ) {
+    error.printError();
+    cout << "File error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
+  
+  // catch failure caused by the DataSet operations                                                                          
+  catch( DataSetIException error ) {
+    error.printError();
+    cout << "Dataset error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
+  
+  // catch failure caused by the DataSpace operations
+  catch( DataSpaceIException error ) {
+    error.printError();
+    cout << "Dataspace error" << std::endl;
+    if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
+      perror( "Error deleting file");
+    }
+  }
+
+  delete[] threads;
 }
 
 
