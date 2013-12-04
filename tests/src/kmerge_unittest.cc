@@ -8,8 +8,7 @@
 #include "indexBuilder.h"
 #include "catch.hpp"
 #include "armadillo"
-#include <pthread.h>
-
+#include "threadpool.h"
 
 using namespace arma;
 
@@ -316,10 +315,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   uint thread_count = 3;
 
-  pthread_t* threads = new pthread_t[thread_count];
+  ThreadPool tp(thread_count);
 
-
-  std::vector<uint>::iterator iter;
 
   try {
     KMerge* kmerge = new KMerge(params1.hdf5_file_name);
@@ -328,18 +325,20 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     params2.kmerge = kmerge;
     params3.kmerge = kmerge;
 
-    int ret1 = pthread_create(&threads[0], NULL, &KMerge::parseAndWriteInThread, (void*) &params1 );
-    int ret2 = pthread_create(&threads[1], NULL, &KMerge::parseAndWriteInThread, (void*) &params2 );
-    int ret3 = pthread_create(&threads[2], NULL, &KMerge::parseAndWriteInThread, (void*) &params3 );
 
-    pthread_join( threads[0], NULL);
-    pthread_join( threads[1], NULL);
-    pthread_join( threads[2], NULL);
+    Task t1(&KMerge::parseAndWriteInThread, (void*) &params1);
+    Task t2(&KMerge::parseAndWriteInThread, (void*) &params2);
+    Task t3(&KMerge::parseAndWriteInThread, (void*) &params3);
 
+    tp.initialize_threadpool();
+    
+    tp.add_task(&t1);
+    tp.add_task(&t2);
+    tp.add_task(&t3);
 
-    REQUIRE(ret1 == 0);
-    REQUIRE(ret2 == 0);
-    REQUIRE(ret3 == 0);
+    sleep(2);
+
+    tp.destroy_threadpool();
 
 
     REQUIRE(params1.hashes.size() == 64);
@@ -450,7 +449,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     }
   }
 
-  delete[] threads;
 }
 
 

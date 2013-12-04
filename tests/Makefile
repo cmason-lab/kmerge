@@ -1,5 +1,6 @@
 HOME_DIR = /home/darryl
 DEVELOPMENT_INCLUDE_DIR = $(HOME_DIR)/Development/include
+DEVELOPMENT_LIB_DIR = $(HOME_DIR)/Development/lib
 TEST_INCLUDE_DIR = $(HOME_DIR)/Development/kmerge/tests/src
 PROGRAM_SRC_DIR = $(HOME_DIR)/Development/kmerge/src
 
@@ -36,7 +37,7 @@ clean :
 	rm -f $(TESTS) *.o
 
 kmerge_unittest : kmerge_unittest.o kmerge.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEVELOPMENT_INCLUDE_DIR)/threadpool.cpp $^ -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROGRAM_SRC_DIR)/kmerge.cc -o $@

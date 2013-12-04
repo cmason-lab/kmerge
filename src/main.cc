@@ -28,6 +28,10 @@ int main(int argc, char const ** argv) {
   setHelpText(parser, 1, "Start k-mer value");
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
   setHelpText(parser, 2, "End k-mer value");
+  addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
+					  ArgParseArgument::INTEGER, "INT"));
+  setMinValue(parser, "t", "1");
+  setMaxValue(parser, "t", "80");
 
   //Parse command line.
   ArgumentParser::ParseResult res = parse(parser, argc, argv);
@@ -41,10 +45,13 @@ int main(int argc, char const ** argv) {
   uint k_val_start = 0;
   uint k_val_end = 0;
   H5std_string hdf5_file_name;
+  uint num_threads = 1;
   getArgumentValue(hdf5_file_name, parser, 0);
   getArgumentValue(k_val_start, parser, 1);
   getArgumentValue(k_val_end, parser, 2);
-
+  if (isSet(parser, "t")) {
+    getOptionValue(num_threads, parser, "t");
+  }
   
   struct stat st;
   DIR *dirp;
@@ -58,6 +65,7 @@ int main(int argc, char const ** argv) {
   H5std_string hash_dataset_name("");
   H5std_string count_dataset_name("");
   
+  pthread_t* threads = new pthread_t[num_threads];
 
   dirp = opendir(".");
   KMerge *kmerge = new KMerge(hdf5_file_name);
@@ -123,6 +131,7 @@ int main(int argc, char const ** argv) {
   cout << "Org count: " << org_count << endl;
   cout << "Matrix Non-Zeros: " << nz_count << endl;
   delete kmerge;
+  delete[] threads;
   (void)closedir(dirp);
 
   return 0;

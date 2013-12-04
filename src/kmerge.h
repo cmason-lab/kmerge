@@ -3,6 +3,7 @@
 #include <iostream>
 #include <pthread.h>
 #include "H5Cpp.h"
+#include "threadpool.h"
 
 #ifndef H5_NO_NAMESPACE
 #ifndef H5_NO_STD
@@ -28,7 +29,6 @@ class KMerge {
   H5File *file;
   static pthread_mutex_t mutex;
 
-
  public:
   static const uint GZIP_BEST_COMPRESSION = 9;
   static const uint CHUNK_ROW_SIZE = 1000000; //An estimate of the max number of kmer hashes produced for an organism
@@ -40,8 +40,10 @@ class KMerge {
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
   std::vector<uint> getDatasetFromHDF5File(const H5std_string&);
   bool addDatasetToHDF5File(const H5std_string&, const H5std_string&, const hsize_t, const uint*, const bool);
+  static void addDatasetToHDF5FileT(void*);
   bool parseKmerCountsFile(const std::string&, std::vector<uint>&, std::vector<uint>&);
-  static void* parseAndWriteInThread(void*);
+  static void parseKmerCountsFileT(void*);
+  static void parseAndWriteInThread(void*);
   bool appendToDataset(void);
   bool updateDataset(void);
   uint * getDatasetValues(void);
