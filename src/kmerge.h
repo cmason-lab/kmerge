@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <map>
 #include <iostream>
 #include <pthread.h>
 #include "H5Cpp.h"
@@ -38,10 +39,12 @@ class KMerge {
   ~KMerge();
   static uint hashKmer(const std::string&);
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
+  bool addHashAndCount(std::map<uint, uint>&, uint, uint);
   std::vector<uint> getDatasetFromHDF5File(const H5std_string&);
   bool addDatasetToHDF5File(const H5std_string&, const H5std_string&, const hsize_t, const uint*, const bool);
   static void addDatasetToHDF5FileT(void*);
   bool parseKmerCountsFile(const std::string&, std::vector<uint>&, std::vector<uint>&);
+  bool parseKmerCountsFile(const std::string&, std::map<uint, uint>&);
   static void parseKmerCountsFileT(void*);
   static void parseAndWriteInThread(void*);
   bool appendToDataset(void);
@@ -52,10 +55,9 @@ class KMerge {
 struct param_struct {
   KMerge * kmerge;
   H5std_string hdf5_file_name;
-  H5std_string kmer_count_file_name;
+  uint k_val_start;
+  uint k_val_end;
   H5std_string group_name;
   H5std_string hash_dataset_name;
   H5std_string count_dataset_name;
-  std::vector<uint> hashes;
-  std::vector<uint> counts;
 } ;

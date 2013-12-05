@@ -64,8 +64,11 @@ int main(int argc, char const ** argv) {
   H5std_string group_name("");
   H5std_string hash_dataset_name("");
   H5std_string count_dataset_name("");
+  vector<param_struct*> param_ptrs;
+  vector<Task*> task_ptrs;
   
-  pthread_t* threads = new pthread_t[num_threads];
+  ThreadPool tp(num_threads);
+  tp.initialize_threadpool();
 
   dirp = opendir(".");
   KMerge *kmerge = new KMerge(hdf5_file_name);
@@ -74,40 +77,26 @@ int main(int argc, char const ** argv) {
       if (S_ISDIR(st.st_mode)) {
 	string s_org(dp->d_name);
 	if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
-	  cout << "Working on " << s_org << endl;
-	  hashes.clear();
-	  counts.clear();
 	  try {
-	    for (uint k = k_val_start; k <= k_val_end; k=k+2) {
-	      file_name.str("");
-	      file_name << "k" << k << ".counts.gz";
-	      file_loc.str("");
-	      file_loc << s_org << "/" << file_name.str();
-	      if (!(kmerge->parseKmerCountsFile(file_loc.str(), hashes, counts))) {
-		cerr << "Unable to parse: " << file_loc.str() << endl;
-	      } else {
-		cout << "Finished parsing: " << file_loc.str() << endl;
-		cout << "Hashes vector size now: " << hashes.size() << endl;
-	      }
-	    }
-	    group_name = s_org;
+	    param_struct * params = new param_struct;
+	    params->kmerge = kmerge;
+	    params->hdf5_file_name = hdf5_file_name;
+	    params->k_val_start = k_val_start;
+	    params->k_val_end = k_val_end;
+	    params->group_name = s_org;
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "kmer_hash";
-	    hash_dataset_name = dataset_name.str();
-	    if (!(kmerge->addDatasetToHDF5File(group_name, hash_dataset_name, hashes.size(), &hashes[0], true))) {
-	      cerr << "Unable to add hashes for " << s_org << endl;
-	    }
+	    params->hash_dataset_name = dataset_name.str();
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "count";
-	    count_dataset_name = dataset_name.str();
-	    if (!(kmerge->addDatasetToHDF5File(group_name, count_dataset_name, counts.size(), &counts[0], false))) {
-	      cerr << "Unable to add counts for " << s_org << endl;
-	    }
-	    nz_count += hashes.size();
+	    params->count_dataset_name = dataset_name.str();
+	    Task* task = new Task(&KMerge::parseAndWriteInThread, (void*) params);
+	    param_ptrs.push_back(params);
+	    tp.add_task(task);
+	    task_ptrs.push_back(task);
+	    //nz_count += hashes.size();
 	    // done processing kmers for this organism                                             
-	    org_count++;
-	    cout << hashes.size() << " k-mer hashes for " << s_org << endl;
-	    cout << "Done." << endl;
+	    //org_count++;
 	  }
 	  catch( FileIException error ) {
 	    error.printError();
@@ -127,11 +116,21 @@ int main(int argc, char const ** argv) {
       }
     }
   }
+  sleep(2);
+  tp.destroy_threadpool();
+  
+  //cout << "Org count: " << org_count << endl;
+  //cout << "Matrix Non-Zeros: " << nz_count << endl;
+  for (vector<Task*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
+    delete *iter;
+  }
 
-  cout << "Org count: " << org_count << endl;
-  cout << "Matrix Non-Zeros: " << nz_count << endl;
+  for (vector<param_struct*>::iterator iter=param_ptrs.begin(); iter!=param_ptrs.end(); iter++) {
+    delete *iter;
+  }
+
   delete kmerge;
-  delete[] threads;
+  
   (void)closedir(dirp);
 
   return 0;

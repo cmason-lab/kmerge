@@ -3,3 +3,6 @@
 tests/sandbox/
 debug/kmerge
 release/kmerge
+tests/15660
+tests/165199
+tests/29309

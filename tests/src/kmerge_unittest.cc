@@ -181,6 +181,7 @@ TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
   std::vector<uint> counts;
+  std::map<uint, uint> hashed_counts;
 
   const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/k3.counts.gz");
 
@@ -194,24 +195,39 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   try {
     KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
   
-    bool success = kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashes, counts);
+    bool success = kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashed_counts);
     REQUIRE(success == true);
 
+    const string kmer0("AAA");
+    const string kmer63("TTT");
+    uint kmer0_pos = 0;
+    uint kmer63_pos = 0;
+    uint pos = 0;
 
+    for (std::map<uint, uint>::iterator map_iter = hashed_counts.begin(); map_iter != hashed_counts.end(); map_iter++) {
+      if (map_iter->first == KMerge::hashKmer(kmer0)) {
+	kmer0_pos = pos;
+      }
+      if (map_iter->first == KMerge::hashKmer(kmer63)) {
+	kmer63_pos = pos;
+      }
+      hashes.push_back(map_iter->first);
+      counts.push_back(map_iter->second);
+      pos++;
+    }
 
     REQUIRE(hashes.size() == 64);
     REQUIRE(counts.size() == 64);
 
-    const string kmer0("AAA");
-    const string kmer63("TTT");
+
     const uint kmer0_count = 95944;
     const uint kmer63_count = 99230;
 
 
-    REQUIRE(hashes[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(hashes[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(counts[0] == kmer0_count);
-    REQUIRE(counts[63] == kmer63_count);
+    REQUIRE(hashes[kmer0_pos] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes[kmer63_pos] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts[kmer0_pos] == kmer0_count);
+    REQUIRE(counts[kmer63_pos] == kmer63_count);
     
     kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
     kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
@@ -226,7 +242,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     REQUIRE(counts2.size() == 64);
 
     
-    uint pos = 0; 
+    pos = 0; 
     for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
       if (*iter==KMerge::hashKmer(kmer0)) {      
 	break;
@@ -292,17 +308,21 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   param_struct params2;
   param_struct params3;
 
-  params1.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/15660/k3.counts.gz";
-  params2.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/165199/k3.counts.gz";
-  params3.kmer_count_file_name = "/home/darryl/Development/kmerge/tests/sandbox/29309/k3.counts.gz";
+  params1.k_val_start = 3;
+  params1.k_val_end = 3;
+  params2.k_val_start = 3;
+  params2.k_val_end = 3;
+  params3.k_val_start = 3;
+  params3.k_val_end = 3;
+
 
   params1.hdf5_file_name =  "/home/darryl/Development/kmerge/tests/thread_example.h5";
   params2.hdf5_file_name = params1.hdf5_file_name;
   params3.hdf5_file_name = params2.hdf5_file_name;
 
-  params1.group_name =  "/15660";
-  params2.group_name = "/165199";
-  params3.group_name ="/29309";
+  params1.group_name =  "15660";
+  params2.group_name = "165199";
+  params3.group_name ="29309";
 
   params1.hash_dataset_name =  "/15660/kmer_hash";
   params1.count_dataset_name = "/15660/count";
@@ -332,6 +352,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     tp.initialize_threadpool();
     
+
     tp.add_task(&t1);
     tp.add_task(&t2);
     tp.add_task(&t3);
@@ -341,80 +362,75 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     tp.destroy_threadpool();
 
 
-    REQUIRE(params1.hashes.size() == 64);
-    REQUIRE(params1.counts.size() == 64);
-    REQUIRE(params2.hashes.size() == 64);
-    REQUIRE(params2.counts.size() == 64);
-    REQUIRE(params3.hashes.size() == 64);
-    REQUIRE(params3.counts.size() == 64);
+    std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File("/15660/kmer_hash");
+    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File("/165199/kmer_hash");
+    std::vector<uint> hashes3 = kmerge->getDatasetFromHDF5File("/29309/kmer_hash");
+
+    std::vector<uint> counts1 = kmerge->getDatasetFromHDF5File("/15660/count");
+    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File("/165199/count");
+    std::vector<uint> counts3 = kmerge->getDatasetFromHDF5File("/29309/count");
 
     const string kmer0("AAA");
     const string kmer63("TTT");
     uint kmer0_count = 85060;
     uint kmer63_count = 85174;
+    uint kmer0_pos = 0;
+    uint kmer63_pos = 0;
+    uint pos = 0;
 
+    for (std::vector<uint>::iterator iter = hashes1.begin(); iter != hashes1.end(); iter++) {
+      if ((*iter) == KMerge::hashKmer(kmer0)) {
+	kmer0_pos = pos;
+      }
+      if ((*iter) == KMerge::hashKmer(kmer63)) {
+	kmer63_pos = pos;
+      }
+      pos++;
+    }
 
-    REQUIRE(params1.hashes[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(params1.hashes[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(params1.counts[0] == kmer0_count);
-    REQUIRE(params1.counts[63] == kmer63_count);
-
-    kmer0_count = 65798;
-    kmer63_count = 65803;
-
-
-    REQUIRE(params2.hashes[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(params2.hashes[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(params2.counts[0] == kmer0_count);
-    REQUIRE(params2.counts[63] == kmer63_count);
-
-    kmer0_count = 95944;
-    kmer63_count = 99230;
-
-
-    REQUIRE(params3.hashes[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(params3.hashes[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(params3.counts[0] == kmer0_count);
-    REQUIRE(params3.counts[63] == kmer63_count);
-
-
-    std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File(params1.hash_dataset_name);
-    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File(params2.hash_dataset_name);
-    std::vector<uint> hashes3 = kmerge->getDatasetFromHDF5File(params3.hash_dataset_name);
-
-    std::vector<uint> counts1 = kmerge->getDatasetFromHDF5File(params1.count_dataset_name);
-    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File(params2.count_dataset_name);
-    std::vector<uint> counts3 = kmerge->getDatasetFromHDF5File(params3.count_dataset_name);
-
-
-    kmer0_count = 85060;
-    kmer63_count = 85174;
-
-
-    REQUIRE(hashes1[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(hashes1[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(counts1[0] == kmer0_count);
-    REQUIRE(counts1[63] == kmer63_count);
+    REQUIRE(hashes1[kmer0_pos] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes1[kmer63_pos] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts1[kmer0_pos] == kmer0_count);
+    REQUIRE(counts1[kmer63_pos] == kmer63_count);
 
 
     kmer0_count = 65798;
     kmer63_count = 65803;
+    pos = 0;
+    for (std::vector<uint>::iterator iter = hashes2.begin(); iter != hashes2.end(); iter++) {
+      if ((*iter) == KMerge::hashKmer(kmer0)) {
+        kmer0_pos = pos;
+      }
+      if ((*iter) == KMerge::hashKmer(kmer63)) {
+	kmer63_pos = pos;
+      }
+      pos++;
+    }
 
-
-    REQUIRE(hashes2[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(hashes2[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(counts2[0] == kmer0_count);
-    REQUIRE(counts2[63] == kmer63_count);
+    REQUIRE(hashes2[kmer0_pos] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes2[kmer63_pos] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts2[kmer0_pos] == kmer0_count);
+    REQUIRE(counts2[kmer63_pos] == kmer63_count);
 
 
     kmer0_count = 95944;
     kmer63_count = 99230;
 
+    pos = 0;
+    for (std::vector<uint>::iterator iter = hashes3.begin(); iter != hashes3.end(); iter++) {
+      if ((*iter) == KMerge::hashKmer(kmer0)) {
+        kmer0_pos = pos;
+      }
+      if ((*iter) == KMerge::hashKmer(kmer63)) {
+	kmer63_pos = pos;
+      }
+      pos++;
+    }
 
-    REQUIRE(hashes3[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(hashes3[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(counts3[0] == kmer0_count);
-    REQUIRE(counts3[63] == kmer63_count);
+    REQUIRE(hashes3[kmer0_pos] == KMerge::hashKmer(kmer0));
+    REQUIRE(hashes3[kmer63_pos] == KMerge::hashKmer(kmer63));
+    REQUIRE(counts3[kmer0_pos] == kmer0_count);
+    REQUIRE(counts3[kmer63_pos] == kmer63_count);
 
 
     if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {

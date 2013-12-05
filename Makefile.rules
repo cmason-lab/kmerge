@@ -1,5 +1,6 @@
 SRC=/home/darryl/Development/kmerge/src
 HOME_DIR=/home/darryl
+DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
 CXX=/home/darryl/hdf5/bin/h5c++ 
 CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread
 LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz
@@ -10,7 +11,7 @@ default: all
 all: kmerge
 
 kmerge: main.o
-	$(CXX) $(LDFLAGS) main.o kmerge.o -o kmerge
+	$(CXX) $(LDFLAGS) main.o kmerge.o $(DEVELOPMENT_INCLUDE_DIR)/threadpool.cpp -o kmerge
 
 main.o: kmerge.o $(SRC)/main.cc
 	$(CXX) $(CXXFLAGS) kmerge.o -c $(SRC)/main.cc $(LDFLAGS)
