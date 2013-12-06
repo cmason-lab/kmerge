@@ -182,54 +182,6 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
   return true;
 }
 
-std::vector<uint> KMerge::getDatasetFromHDF5File(const H5std_string& ds_name) {
-  this->file = new H5File( this->file_name, H5F_ACC_RDONLY );
-
-  /*
-   * Open the specified file and the specified dataset in the file.
-   */
-  DataSet dataset = this->file->openDataSet( ds_name );
-
-  /*
-   * Get filespace of the dataset.
-   */
-  DataSpace file_space = dataset.getSpace();
-
-
-  /*
-   * Get the number of dimensions in the dataspace.
-   */
-  int rank = file_space.getSimpleExtentNdims();
-
-
-  /*
-   * Get the dimension size of each dimension in the dataspace
-   */
-  hsize_t dims[2];
-  int ndims = file_space.getSimpleExtentDims( dims, NULL);
-
-
-  /*
-   * Define the memory space to read dataset.
-   */
-
-  DataSpace mem_space(rank, dims);
-
-
-  /*
-   * Read dataset.
-   */
-  std::vector<uint> data(dims[0]);
-  dataset.read( &data[0], PredType::NATIVE_UINT, mem_space, file_space );
-  
-
-  this->file->close();
-  delete this->file;
-
-
-  return data;
-}
-
 void KMerge::parseAndWriteInThread(void* arg) {
   param_struct * params = (param_struct*) arg;
   stringstream file_name, file_loc;

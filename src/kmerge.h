@@ -40,7 +40,8 @@ class KMerge {
   static uint hashKmer(const std::string&);
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool addHashAndCount(std::map<uint, uint>&, uint, uint);
-  std::vector<uint> getDatasetFromHDF5File(const H5std_string&);
+  template <class T>
+  std::vector<T> getDatasetFromHDF5File(const H5std_string&, const DataType&);
   bool addDatasetToHDF5File(const H5std_string&, const H5std_string&, const hsize_t, const uint*, const bool);
   static void addDatasetToHDF5FileT(void*);
   bool parseKmerCountsFile(const std::string&, std::vector<uint>&, std::vector<uint>&);
@@ -51,6 +52,56 @@ class KMerge {
   bool updateDataset(void);
   uint * getDatasetValues(void);
 };
+
+template <class T>
+std::vector<T> KMerge::getDatasetFromHDF5File(const H5std_string& ds_name, const DataType& dt) {
+  this->file = new H5File( this->file_name, H5F_ACC_RDONLY );
+
+  /*                                                                                                                                                                                                                                                                                                                                                                       
+   * Open the specified file and the specified dataset in the file.                                                                                                                                                                                                                                                                                                        
+   */
+  DataSet dataset = this->file->openDataSet( ds_name );
+
+  /*                                                                                                                                                                                                                                                                                                                                                                       
+   * Get filespace of the dataset.                                                                                                                                                                                                                                                                                                                                         
+   */
+  DataSpace file_space = dataset.getSpace();
+
+
+  /*                                                                                                                                                                                                                                                                                                                                                                       
+   * Get the number of dimensions in the dataspace.                                                                                                                                                                                                                                                                                                                        
+   */
+  int rank = file_space.getSimpleExtentNdims();
+
+
+  /*                                                                                                                                                                                                                                                                                                                                                                       
+   * Get the dimension size of each dimension in the dataspace                                                                                                                                                                                                                                                                                                             
+   */
+  hsize_t dims[2];
+  int ndims = file_space.getSimpleExtentDims( dims, NULL);
+
+
+  /*                                                                                                                                                                                                                                                                                                                                                                       
+   * Define the memory space to read dataset.                                                                                                                                                                                                                                                                                                                              
+   */
+
+  DataSpace mem_space(rank, dims);
+
+
+  /*                                                                                                                                                                                                                                                                                                                                                                    
+   * Read dataset.                                                                                                                                                                                                                                                                                                                                                         
+   */
+  std::vector<T> data(dims[0]);
+  dataset.read( &data[0], dt, mem_space, file_space );
+
+
+  this->file->close();
+  delete this->file;
+
+
+  return data;
+}
+
 
 struct param_struct {
   KMerge * kmerge;

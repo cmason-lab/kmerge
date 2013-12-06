@@ -122,8 +122,8 @@ TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
     this->kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
 
 
-    std::vector<uint> hashes2 = this->kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);
-    std::vector<uint> counts2 = this->kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
+    std::vector<uint> hashes2 = this->kmerge->getDatasetFromHDF5File<uint>(HASH_DATASET_NAME, PredType::NATIVE_UINT);
+    std::vector<uint> counts2 = this->kmerge->getDatasetFromHDF5File<uint>(COUNT_DATASET_NAME, PredType::NATIVE_UINT);
 
 
 
@@ -233,8 +233,8 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
 
 
-    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File(HASH_DATASET_NAME);                                                                                                                        
-    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File(COUNT_DATASET_NAME);
+    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File<uint>(HASH_DATASET_NAME, PredType::NATIVE_UINT);                                                                                                                        
+    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File<uint>(COUNT_DATASET_NAME, PredType::NATIVE_UINT);
 
     
   
@@ -362,13 +362,13 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     tp.destroy_threadpool();
 
 
-    std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File("/15660/kmer_hash");
-    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File("/165199/kmer_hash");
-    std::vector<uint> hashes3 = kmerge->getDatasetFromHDF5File("/29309/kmer_hash");
+    std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File<uint>("/15660/kmer_hash", PredType::NATIVE_UINT);
+    std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File<uint>("/165199/kmer_hash", PredType::NATIVE_UINT);
+    std::vector<uint> hashes3 = kmerge->getDatasetFromHDF5File<uint>("/29309/kmer_hash", PredType::NATIVE_UINT);
 
-    std::vector<uint> counts1 = kmerge->getDatasetFromHDF5File("/15660/count");
-    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File("/165199/count");
-    std::vector<uint> counts3 = kmerge->getDatasetFromHDF5File("/29309/count");
+    std::vector<uint> counts1 = kmerge->getDatasetFromHDF5File<uint>("/15660/count", PredType::NATIVE_UINT);
+    std::vector<uint> counts2 = kmerge->getDatasetFromHDF5File<uint>("/165199/count", PredType::NATIVE_UINT);
+    std::vector<uint> counts3 = kmerge->getDatasetFromHDF5File<uint>("/29309/count", PredType::NATIVE_UINT);
 
     const string kmer0("AAA");
     const string kmer63("TTT");
