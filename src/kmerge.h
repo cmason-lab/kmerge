@@ -4,7 +4,6 @@
 #include <iostream>
 #include <pthread.h>
 #include "H5Cpp.h"
-#include "threadpool.h"
 
 #ifndef H5_NO_NAMESPACE
 #ifndef H5_NO_STD
@@ -22,6 +21,18 @@ using namespace H5;
 
 typedef unsigned int uint;
 
+class KMerge;
+
+struct param_struct {
+  KMerge * kmerge;
+  H5std_string hdf5_file_name;
+  uint k_val_start;
+  uint k_val_end;
+  H5std_string group_name;
+  H5std_string hash_dataset_name;
+  H5std_string count_dataset_name;
+} ;
+
 
 
 class KMerge {
@@ -37,7 +48,8 @@ class KMerge {
 
   KMerge(const H5std_string&);
   ~KMerge();
-  static uint hashKmer(const std::string&);
+  //static uint hashKmer(const std::string&);
+  static int hashKmer(const std::string&);
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool addHashAndCount(std::map<uint, uint>&, uint, uint);
   template <class T>
@@ -47,10 +59,25 @@ class KMerge {
   bool parseKmerCountsFile(const std::string&, std::vector<uint>&, std::vector<uint>&);
   bool parseKmerCountsFile(const std::string&, std::map<uint, uint>&);
   static void parseKmerCountsFileT(void*);
-  static void parseAndWriteInThread(void*);
+  static void parseAndWriteInThread(const param_struct&);
   bool appendToDataset(void);
   bool updateDataset(void);
   uint * getDatasetValues(void);
+  std::vector<std::string> getGroupsFromHDF5File(const int&);
+
+  class BuilderTask {
+    public:
+      param_struct params;
+
+      void execute();
+    
+      BuilderTask(const param_struct params) {
+	this->params = params;
+      }
+
+      ~BuilderTask() {
+      }
+  };
 };
 
 template <class T>
@@ -101,14 +128,3 @@ std::vector<T> KMerge::getDatasetFromHDF5File(const H5std_string& ds_name, const
 
   return data;
 }
-
-
-struct param_struct {
-  KMerge * kmerge;
-  H5std_string hdf5_file_name;
-  uint k_val_start;
-  uint k_val_end;
-  H5std_string group_name;
-  H5std_string hash_dataset_name;
-  H5std_string count_dataset_name;
-} ;

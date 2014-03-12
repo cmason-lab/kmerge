@@ -8,9 +8,11 @@
 #include "indexBuilder.h"
 #include "catch.hpp"
 #include "armadillo"
-#include "threadpool.h"
+#include <dlib/threads.h>
+
 
 using namespace arma;
+using namespace dlib;
 
 #ifndef H5_NO_NAMESPACE
 #ifndef H5_NO_STD
@@ -308,6 +310,10 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   param_struct params2;
   param_struct params3;
 
+  //future<param_struct> params1;
+  //future<param_struct> params2;
+  //future<param_struct> params3;
+
   params1.k_val_start = 3;
   params1.k_val_end = 3;
   params2.k_val_start = 3;
@@ -316,11 +322,11 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.k_val_end = 3;
 
 
-  params1.hdf5_file_name =  "/home/darryl/Development/kmerge/tests/thread_example.h5";
-  params2.hdf5_file_name = params1.hdf5_file_name;
-  params3.hdf5_file_name = params2.hdf5_file_name;
+  params1.hdf5_file_name = "/home/darryl/Development/kmerge/tests/thread_example.h5";
+  params2.hdf5_file_name = "/home/darryl/Development/kmerge/tests/thread_example.h5";
+  params3.hdf5_file_name = "/home/darryl/Development/kmerge/tests/thread_example.h5";
 
-  params1.group_name =  "15660";
+  params1.group_name = "15660";
   params2.group_name = "165199";
   params3.group_name ="29309";
 
@@ -335,9 +341,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   uint thread_count = 3;
 
-  ThreadPool tp(thread_count);
-
-
+  //ThreadPool tp(thread_count);
+  //ThreadPool * tp = new ThreadPool(thread_count);
+  thread_pool tp(thread_count);
   try {
     KMerge* kmerge = new KMerge(params1.hdf5_file_name);
 
@@ -346,21 +352,36 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     params3.kmerge = kmerge;
 
 
-    Task t1(&KMerge::parseAndWriteInThread, (void*) &params1);
-    Task t2(&KMerge::parseAndWriteInThread, (void*) &params2);
-    Task t3(&KMerge::parseAndWriteInThread, (void*) &params3);
+    //Task t1(&KMerge::parseAndWriteInThread, (void*) &params1);
+    //Task t2(&KMerge::parseAndWriteInThread, (void*) &params2);
+    //Task t3(&KMerge::parseAndWriteInThread, (void*) &params3);
 
-    tp.initialize_threadpool();
-    
+    //tp->initializeThreads();
 
-    tp.add_task(&t1);
-    tp.add_task(&t2);
-    tp.add_task(&t3);
+    KMerge::BuilderTask t1(params1);
+    KMerge::BuilderTask t2(params2);
+    KMerge::BuilderTask t3(params3);
 
-    sleep(2);
+    tp.add_task(t1, &KMerge::BuilderTask::execute);
+    tp.add_task(t2, &KMerge::BuilderTask::execute);
+    tp.add_task(t3, &KMerge::BuilderTask::execute);
 
-    tp.destroy_threadpool();
+    tp.wait_for_all_tasks();
 
+    //tp.initialize_threads();
+
+    //tp.add_task(&t1);
+    //tp.add_task(&t2);
+    //tp.add_task(&t3);
+
+    //tp->assignWork(t1);
+    //tp->assignWork(t2);
+    //tp->assignWork(t3);
+    //sleep(2);
+
+    //tp.destroy_threadpool();
+    //tp->destroyPool(10);
+    //delete tp;
 
     std::vector<uint> hashes1 = kmerge->getDatasetFromHDF5File<uint>("/15660/kmer_hash", PredType::NATIVE_UINT);
     std::vector<uint> hashes2 = kmerge->getDatasetFromHDF5File<uint>("/165199/kmer_hash", PredType::NATIVE_UINT);
@@ -465,6 +486,10 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     }
   }
 
+}
+
+TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HDF5Test]") {
+  // make sure getGroups command returns the correct number and set of groups
 }
 
 

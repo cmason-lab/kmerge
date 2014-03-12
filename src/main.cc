@@ -9,10 +9,11 @@
 #include <fstream>
 #include "kmerge.h"
 #include "H5Cpp.h"
+#include <dlib/threads.h>
 
 using namespace seqan;
 using namespace std;
-
+using namespace dlib;
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -64,12 +65,10 @@ int main(int argc, char const ** argv) {
   H5std_string group_name("");
   H5std_string hash_dataset_name("");
   H5std_string count_dataset_name("");
-  vector<param_struct*> param_ptrs;
-  vector<Task*> task_ptrs;
-  
-  ThreadPool tp(num_threads);
-  tp.initialize_threadpool();
-
+  //vector<param_struct*> param_ptrs;
+  vector<KMerge::BuilderTask*> task_ptrs;
+ 
+  thread_pool tp(num_threads);
   dirp = opendir(".");
   KMerge *kmerge = new KMerge(hdf5_file_name);
   while ((dp = readdir(dirp)) != NULL) {
@@ -78,21 +77,21 @@ int main(int argc, char const ** argv) {
 	string s_org(dp->d_name);
 	if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
 	  try {
-	    param_struct * params = new param_struct;
-	    params->kmerge = kmerge;
-	    params->hdf5_file_name = hdf5_file_name;
-	    params->k_val_start = k_val_start;
-	    params->k_val_end = k_val_end;
-	    params->group_name = s_org;
+	    param_struct params;
+	    params.kmerge = kmerge;
+	    params.hdf5_file_name = hdf5_file_name;
+	    params.k_val_start = k_val_start;
+	    params.k_val_end = k_val_end;
+	    params.group_name = s_org;
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "kmer_hash";
-	    params->hash_dataset_name = dataset_name.str();
+	    params.hash_dataset_name = dataset_name.str();
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "count";
-	    params->count_dataset_name = dataset_name.str();
-	    Task* task = new Task(&KMerge::parseAndWriteInThread, (void*) params);
-	    param_ptrs.push_back(params);
-	    tp.add_task(task);
+	    params.count_dataset_name = dataset_name.str();
+	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
+	    //param_ptrs.push_back(params);
+            tp.add_task(*task, &KMerge::BuilderTask::execute);
 	    task_ptrs.push_back(task);
 	    //nz_count += hashes.size();
 	    // done processing kmers for this organism                                             
@@ -116,18 +115,17 @@ int main(int argc, char const ** argv) {
       }
     }
   }
-  sleep(2);
-  tp.destroy_threadpool();
+  tp.wait_for_all_tasks();
   
   //cout << "Org count: " << org_count << endl;
   //cout << "Matrix Non-Zeros: " << nz_count << endl;
-  for (vector<Task*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
+  for (vector<KMerge::BuilderTask*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
     delete *iter;
   }
 
-  for (vector<param_struct*>::iterator iter=param_ptrs.begin(); iter!=param_ptrs.end(); iter++) {
+  /*for (vector<param_struct*>::iterator iter=param_ptrs.begin(); iter!=param_ptrs.end(); iter++) {
     delete *iter;
-  }
+    }*/
 
   delete kmerge;
   

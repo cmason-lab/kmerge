@@ -15,7 +15,7 @@ CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
 #OPT = -O2
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -pthread
+CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
@@ -37,7 +37,7 @@ clean :
 	rm -f $(TESTS) *.o
 
 kmerge_unittest : kmerge_unittest.o kmerge.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEVELOPMENT_INCLUDE_DIR)/threadpool.cpp $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROGRAM_SRC_DIR)/kmerge.cc -o $@
