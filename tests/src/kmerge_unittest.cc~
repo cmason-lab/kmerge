@@ -9,8 +9,11 @@
 #include "catch.hpp"
 #include "armadillo"
 #include <dlib/threads.h>
+#include <seqan/sequence.h>
+#include <seqan/alignment_free.h>
+#include <libGkArrays/gkArrays.h>
 
-
+using namespace seqan;
 using namespace arma;
 using namespace dlib;
 
@@ -90,6 +93,60 @@ class HashTestFixture  {
 
   // Objects declared here can be used by all tests in the test case for Foo.
 };
+
+TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
+  // Default k-mer length
+  int k = 3;
+  // Building the index
+  cout << "Reached Here" << endl;
+  gkarrays::gkArrays *genome = new gkarrays::gkArrays("variable.fa", k);
+  cout << "Reading data " << endl;
+  // Retrieving the first k-mer of the first read
+  char *kmer = genome->getTagFactor(0, 0, k);
+  
+  // checking number of indexed sequences
+  
+  REQUIRE(genome->getNbTags() == 1);
+  REQUIRE(genome->getGkCFALength() == 64);
+
+
+
+  // Displaying the occurrences (read number, position in the read)
+  // for that specific k-mer.
+  printf("All the occurrences:\n");
+  cout << "Text factor is " << genome->getTextFactor(0,0) << endl;
+  /*std::pair<uint, uint> *occurrences = reads->getTagsWithFactor(0, 0);
+  for (uint i = 0; i < reads->getNbTagsWithFactor(0, 0, true); i++) {
+    printf("(%d,%d)\t", occurrences[i].first, occurrences[i].second);
+  }
+  printf("\n");*/
+
+  // Free-ing memory.
+  //delete [] occurrences;
+  delete genome;
+  delete [] kmer;
+}
+
+TEST_CASE("CountKmersWithMultipleChromosomesGKArraysTest", "[HashTest]") {
+}
+
+TEST_CASE("CountKmersTest", "[HashTest]") {
+  Dna5String sequenceDna5 =
+    "TAGGTTTTCCGAAAAGGTAGCAACTTTACGTGATCAAACCTCTGACGGGGTTTTCCCCGTCGAAATTGGGTG"
+    "TTTCTTGTCTTGTTCTCACTTGGGGCATCTCCGTCAAGCCAAGAAAGTGCTCCCTGGATTCTGTTGCTAACG"
+    "AGTCTCCTCTGCATTCCTGCTTGACTGATTGGGCGGACGGGGTGTCCACCTGACGCTGAGTATCGCCGTCAC"
+    "GGTGCCACATGTCTTATCTATTCAGGGATCAGAATTTATTCAGGAAATCAGGAGATGCTACACTTGGGTTAT"
+    "CGAAGCTCCTTCCAAGGCGTAGCAAGGGCGACTGAGCGCGTAAGCTCTAGATCTCCTCGTGTTGCAACTACA"
+    "CGCGCGGGTCACTCGAAACACATAGTATGAACTTAACGACTGCTCGTACTGAACAATGCTGAGGCAGAAGAT"
+    "CGCAGACCAGGCATCCCACTGCTTGAAAAAACTATNNNNCTACCCGCCTTTTTATTATCTCATCAGATCAAG";
+ 
+  String<unsigned> kmerCounts;
+  unsigned k = 3;  // Count all 2-mers
+  countKmers(kmerCounts, sequenceDna5, k);
+ 
+  for(unsigned i = 0; i<64; ++i)       // Print the 2-mer counts
+    std::cout<<kmerCounts[i]<< std::endl;  // 34 times AA; 30 times AC; 28 times AG; ...
+}
 
 TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
   std::vector<uint> hashes;
@@ -633,11 +690,11 @@ TEST_CASE("WriteSparseMatrixToHDF5AndReadFromAramdillo", "[SparseHDF5Test]") {
   uvec org_start(temp, dims);
 
   uvec hashes(hashed_kmers);
-  Col<uint> counts(hash_counts, dims);
+  /*Col<uint> counts(hash_counts, dims);
   SpMat<uint> A(hashes, org_start, counts, UINT_MAX, org_start.n_elem - 1);
 
   REQUIRE(A(kmer1_hash_val, 0) == kmer1_count);
-  REQUIRE(A(kmer2_hash_val, 0) == kmer2_count);
+  REQUIRE(A(kmer2_hash_val, 0) == kmer2_count);*/
 
   delete [] hash_counts;
 }

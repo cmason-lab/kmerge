@@ -15,7 +15,8 @@ CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
 #OPT = -O2
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
+#CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
+CXXFLAGS += -g -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
@@ -27,7 +28,7 @@ CXX=/home/darryl/hdf5/bin/h5c++
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -L $(HOME_DIR)/lib -lsz -L $(HOME_DIR)/lib64 -larmadillo
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -L $(HOME_DIR)/lib -lsz -lGkArrays -L $(HOME_DIR)/lib64 -larmadillo
 
 # House-keeping build targets.
 

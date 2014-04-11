@@ -9,8 +9,11 @@
 #include "catch.hpp"
 #include "armadillo"
 #include <dlib/threads.h>
+#include <seqan/sequence.h>
+#include <seqan/alignment_free.h>
+#include <libGkArrays/gkArrays.h>
 
-
+using namespace seqan;
 using namespace arma;
 using namespace dlib;
 
@@ -90,6 +93,77 @@ class HashTestFixture  {
 
   // Objects declared here can be used by all tests in the test case for Foo.
 };
+
+TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
+  // Default k-mer length
+  int k = 5;
+  // Building the index
+  gkarrays::gkArrays *genome = new gkarrays::gkArrays("genome.test.fa.gz", k);
+  // Retrieving the first k-mer of the first read
+  char *kmer = genome->getTagFactor(0, 0, k);
+  
+  // checking number of indexed sequences
+  
+  REQUIRE(genome->getNbTags() == 1);
+  REQUIRE(genome->getGkCFALength() == 305);
+
+  std::cout << "Kmer is " << kmer << std::endl;
+
+  // Displaying the occurrences (read number, position in the read)
+  // for that specific k-mer.
+  printf("All the occurrences:\n");
+  cout << "Text factor is " << genome->getTextFactor(0,0) << endl;
+  uint count;
+  std::pair<uint, uint> *occurrences = genome->getTagsWithFactor(kmer, k, count);
+  cout << "Kmer count is " << count << endl;
+
+  /* Strategy:
+   * Keep a map of the k-mers encountered from a genome, loop through each sequence in the genome
+   * for every k-mer encountered check if we've seen it before, if we have, ignore it,
+   * if we haven't, look at total times k-mer is seen (stored in "count" of "getTagsWithFactor")
+   * record this number of times in k-mer counts for genome and put it in kmers_found map so that it is ignored next time
+   * need to loop over all sequences in the file when doing this to make sure all k-mers are acconted for
+   * STOP when the kmers_found map has the same number of elements as "getGkCFALength".
+   *
+   * May still be a way to get the list of k-mers in the index without going through each read but haven't found it yet.
+   */
+  
+  /*for (uint i = 0; i < reads->getNbTagsWithFactor(0, 0, true); i++) {
+    printf("(%d,%d)\t", occurrences[i].first, occurrences[i].second);
+    }*/
+  printf("\n");
+
+  // Free-ing memory.
+  delete [] occurrences;
+  delete genome;
+  delete [] kmer;
+}
+
+TEST_CASE("CountKmersWithMultipleChromosomesGKArraysTest", "[HashTest]") {
+}
+
+TEST_CASE("CountKmersTest", "[HashTest]") {
+  Dna5String sequenceDna5 =
+    "TAGGTTTTCCGAAAAGGTAGCAACTTTACGTGATCAAACCTCTGACGGGGTTTTCCCCGTCGAAATTGGGTG"
+    "TTTCTTGTCTTGTTCTCACTTGGGGCATCTCCGTCAAGCCAAGAAAGTGCTCCCTGGATTCTGTTGCTAACG"
+    "AGTCTCCTCTGCATTCCTGCTTGACTGATTGGGCGGACGGGGTGTCCACCTGACGCTGAGTATCGCCGTCAC"
+    "GGTGCCACATGTCTTATCTATTCAGGGATCAGAATTTATTCAGGAAATCAGGAGATGCTACACTTGGGTTAT"
+    "CGAAGCTCCTTCCAAGGCGTAGCAAGGGCGACTGAGCGCGTAAGCTCTAGATCTCCTCGTGTTGCAACTACA"
+    "CGCGCGGGTCACTCGAAACACATAGTATGAACTTAACGACTGCTCGTACTGAACAATGCTGAGGCAGAAGAT"
+    "CGCAGACCAGGCATCCCACTGCTTGAAAAAACTATNNNNCTACCCGCCTTTTTATTATCTCATCAGATCAAG";
+ 
+  String<unsigned> kmerCounts;
+  unsigned k = 5;  // Count all 2-mers
+  countKmers(kmerCounts, sequenceDna5, k);
+  REQUIRE(length(kmerCounts) == 305);
+  int count = 0;
+  for(unsigned i = 0; i<length(kmerCounts); ++i) {
+    if (kmerCounts[i] != '0') {
+      count++;
+    }
+  }
+  REQUIRE(count == 305);
+}
 
 TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
   std::vector<uint> hashes;
@@ -488,10 +562,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
 }
 
-TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HDF5Test]") {
-  // make sure getGroups command returns the correct number and set of groups
-}
-
 
 TEST_CASE("WriteSparseMatrixToHDF5AndReadFromAramdillo", "[SparseHDF5Test]") {
   const string kmer1("ACTGA");
@@ -637,11 +707,11 @@ TEST_CASE("WriteSparseMatrixToHDF5AndReadFromAramdillo", "[SparseHDF5Test]") {
   uvec org_start(temp, dims);
 
   uvec hashes(hashed_kmers);
-  Col<uint> counts(hash_counts, dims);
+  /*Col<uint> counts(hash_counts, dims);
   SpMat<uint> A(hashes, org_start, counts, UINT_MAX, org_start.n_elem - 1);
 
   REQUIRE(A(kmer1_hash_val, 0) == kmer1_count);
-  REQUIRE(A(kmer2_hash_val, 0) == kmer2_count);
+  REQUIRE(A(kmer2_hash_val, 0) == kmer2_count);*/
 
   delete [] hash_counts;
 }
