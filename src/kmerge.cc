@@ -21,6 +21,11 @@ KMerge::KMerge (const H5std_string& file_name) {
 }
 
 int KMerge::hashKmer(const std::string& kMer) {
+  // hash kMer and its reverse compliment together (concatenate them)
+  // if kMer < rc_kMer 
+  // s = kMer + rc_kMer
+  // else
+  // s = rc_kMer + kMer
   return((uint) hashlittle(kMer.c_str(), kMer.length(), 0));
 }
 

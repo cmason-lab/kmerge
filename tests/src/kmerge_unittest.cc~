@@ -29,126 +29,109 @@ using namespace dlib;
 using namespace H5;
 #endif
 
-// The fixture for testing class k-mer hashing.
-class HashTestFixture  {
-
-
- public:
-  
-  KMerge* kmerge;
-
-  HashTestFixture() {
-
-
-    const string kmer1("ACTGA");
-    const int kmer1_count = 4;
-    const string kmer2("ATCGT");
-    const int kmer2_count = 3;
-
-    uint kmer1_hash_val = KMerge::hashKmer(kmer1);
-    uint kmer2_hash_val = KMerge::hashKmer(kmer2);
-
-    const H5std_string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/example.h5" );
-    const H5std_string GROUP_NAME( "/org1" );
-    const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
-    const H5std_string COUNT_DATASET_NAME( "/org1/count" );
-
-    try {
-      this->kmerge = new KMerge(HDF5_FILE_NAME);
-      std::vector<uint> hashes;
-      std::vector<uint> counts;
-                                                                                                                                 
-      kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer1), kmer1_count);
-      kmerge->addHashAndCount(hashes, counts, KMerge::hashKmer(kmer2), kmer2_count);
-      kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
-      kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
-
-    } 
-    catch( FileIException error ) {
-      error.printError();
-    }
-
-    // catch failure caused by the DataSet operations
-    catch( DataSetIException error ) {
-	error.printError();
-    }
-
-    // catch failure caused by the DataSpace operations
-    catch( DataSpaceIException error ) {
-	error.printError();
-    }
-
-  }
-
-  virtual ~HashTestFixture() {
-    // Code here will be called immediately after each test (right
-    // before the destructor).
-
-    delete this->kmerge;
-
-    if (remove( "/home/darryl/Development/kmerge/tests/example.h5" ) != 0) {
-      perror( "Error deleting file");
-    }
-  }
-
-  // Objects declared here can be used by all tests in the test case for Foo.
-};
-
 TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
+  std::map<std::string, int> gka_counts;
   // Default k-mer length
-  int k = 3;
+  int k = 5;
+
+  ifstream in_file ("genome.test.kmers.txt");
+
   // Building the index
-  cout << "Reached Here" << endl;
-  gkarrays::gkArrays *genome = new gkarrays::gkArrays("variable.fa", k);
-  cout << "Reading data " << endl;
-  // Retrieving the first k-mer of the first read
-  char *kmer = genome->getTagFactor(0, 0, k);
+  gkarrays::gkArrays *genome = new gkarrays::gkArrays("genome.test.contig.fa.gz", k, false, 0, true);
   
   // checking number of indexed sequences
   
-  REQUIRE(genome->getNbTags() == 1);
-  REQUIRE(genome->getGkCFALength() == 64);
+  /*REQUIRE(genome->getNbTags() == 2);
+  REQUIRE(genome->getGkCFALength() == 427);
+  for (uint seq_idx = 0; seq_idx < genome->getNbTags(); seq_idx++) {
+    for(uint kmer_idx = 0; kmer_idx < genome->getSupportLength(seq_idx); kmer_idx++) {
+      char *kmer = genome->getTagFactor(seq_idx, kmer_idx, k); 
+      uint count;
+      std::pair<uint, uint> *occurrences = genome->getTagsWithFactor(kmer, k, count);
+      if (gka_counts.find(kmer) == gka_counts.end()) {
+        gka_counts[kmer] = count;
+      }
+      cout << kmer << " " << count << endl;
+    }
+    }*/
+
+  uint found = 0;
+  gkarrays::readIterator *read_iter = genome->getReads()->begin();
+  uint i = 0, count = 0;
+  while (!read_iter->isFinished()) {
+    cout << "chr name: " << read_iter->getName() << endl;
+    uint *support = genome->getSupport(i);
+    for(uint j = 0; j < genome->getSupportLength(i); j++) {
+      char *kmer = genome->getTagFactor(i, j, k);
+      if (strcmp(kmer, "AAACT") == 0) {
+	cout << "Found here (" << i << "," << j << ")" << endl;
+	found++;
+      }
+      if (gka_counts.count(kmer) == 0) {
+	count++;
+	gka_counts[kmer] = support[j];
+      }
+    }
+    ++(*read_iter);
+    i++;
+  }
+
+  cout << "Found it " << found << " times" << endl;
 
 
+  // compare to jellyfish results
+  // ~/bin/jellyfish count -m 5 -o output -s 10000 -C <(zcat genome.test.fa.gz)
+  // ~/bin/jellyfish dump -c output > genome.test.kmers.txt
+
+  std::string k_seq;
+  int kmer_count;
+  if (in_file.is_open()) {
+    while ( !in_file.eof() ) {
+      in_file >> k_seq >> kmer_count;
+      cout << k_seq << endl;
+      cout << "GKA count " << gka_counts[k_seq] << endl;
+      cout << "Jellyfish count " << kmer_count << endl;
+      REQUIRE(gka_counts[k_seq] == kmer_count);
+    }
+    in_file.close();
+  }
 
   // Displaying the occurrences (read number, position in the read)
   // for that specific k-mer.
+  /*
   printf("All the occurrences:\n");
   cout << "Text factor is " << genome->getTextFactor(0,0) << endl;
-  /*std::pair<uint, uint> *occurrences = reads->getTagsWithFactor(0, 0);
-  for (uint i = 0; i < reads->getNbTagsWithFactor(0, 0, true); i++) {
+  uint count;
+  std::pair<uint, uint> *occurrences = genome->getTagsWithFactor(kmer, k, count);
+  cout << "Kmer count is " << count << endl;
+  */
+
+  /* Strategy:
+   * Keep a map of the k-mers encountered from a genome, loop through each sequence in the genome
+   * for every k-mer encountered check if we've seen it before, if we have, ignore it,
+   * if we haven't, look at total times k-mer is seen (stored in "count" of "getTagsWithFactor")
+   * record this number of times in k-mer counts for genome and put it in kmers_found map so that it is ignored next time
+   * need to loop over all sequences in the file when doing this to make sure all k-mers are acconted for
+   * STOP when the kmers_found map has the same number of elements as "getGkCFALength".
+   *
+   * use hash_map for this notmap
+
+   * May still be a way to get the list of k-mers in the index without going through each read but haven't found it yet.
+   */
+  
+  /*for (uint i = 0; i < reads->getNbTagsWithFactor(0, 0, true); i++) {
     printf("(%d,%d)\t", occurrences[i].first, occurrences[i].second);
-  }
-  printf("\n");*/
+    }*/
+  printf("\n");
 
   // Free-ing memory.
   //delete [] occurrences;
   delete genome;
-  delete [] kmer;
+  //delete [] kmer;
 }
 
-TEST_CASE("CountKmersWithMultipleChromosomesGKArraysTest", "[HashTest]") {
-}
 
-TEST_CASE("CountKmersTest", "[HashTest]") {
-  Dna5String sequenceDna5 =
-    "TAGGTTTTCCGAAAAGGTAGCAACTTTACGTGATCAAACCTCTGACGGGGTTTTCCCCGTCGAAATTGGGTG"
-    "TTTCTTGTCTTGTTCTCACTTGGGGCATCTCCGTCAAGCCAAGAAAGTGCTCCCTGGATTCTGTTGCTAACG"
-    "AGTCTCCTCTGCATTCCTGCTTGACTGATTGGGCGGACGGGGTGTCCACCTGACGCTGAGTATCGCCGTCAC"
-    "GGTGCCACATGTCTTATCTATTCAGGGATCAGAATTTATTCAGGAAATCAGGAGATGCTACACTTGGGTTAT"
-    "CGAAGCTCCTTCCAAGGCGTAGCAAGGGCGACTGAGCGCGTAAGCTCTAGATCTCCTCGTGTTGCAACTACA"
-    "CGCGCGGGTCACTCGAAACACATAGTATGAACTTAACGACTGCTCGTACTGAACAATGCTGAGGCAGAAGAT"
-    "CGCAGACCAGGCATCCCACTGCTTGAAAAAACTATNNNNCTACCCGCCTTTTTATTATCTCATCAGATCAAG";
- 
-  String<unsigned> kmerCounts;
-  unsigned k = 3;  // Count all 2-mers
-  countKmers(kmerCounts, sequenceDna5, k);
- 
-  for(unsigned i = 0; i<64; ++i)       // Print the 2-mer counts
-    std::cout<<kmerCounts[i]<< std::endl;  // 34 times AA; 30 times AC; 28 times AG; ...
-}
-
-TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
+/*TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
   std::vector<uint> hashes;
   std::vector<uint> counts;
 
@@ -236,6 +219,7 @@ TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
 
 
 }
+*/
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
