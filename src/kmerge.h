@@ -50,6 +50,9 @@ class KMerge {
   ~KMerge();
   //static uint hashKmer(const std::string&);
   static int hashKmer(const std::string&);
+  static uint hash_kmer(const std::string&);
+  static bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
+  static bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool addHashAndCount(std::map<uint, uint>&, uint, uint);
   template <class T>

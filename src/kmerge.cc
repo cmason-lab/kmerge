@@ -5,7 +5,7 @@
 #include <seqan/file.h>
 #include <seqan/stream.h>
 #include <fstream>
-//#include <climits>
+#include <libGkArrays/gkArrays.h>
 
 using namespace seqan;
 using namespace std;
@@ -21,12 +21,18 @@ KMerge::KMerge (const H5std_string& file_name) {
 }
 
 int KMerge::hashKmer(const std::string& kMer) {
-  // hash kMer and its reverse compliment together (concatenate them)
-  // if kMer < rc_kMer 
-  // s = kMer + rc_kMer
-  // else
-  // s = rc_kMer + kMer
   return((uint) hashlittle(kMer.c_str(), kMer.length(), 0));
+}
+
+uint KMerge::hash_kmer(const std::string& kmer) {
+  string rc_kmer(kmer.c_str()), combine;
+  reverseComplement(rc_kmer);
+  if (kmer < rc_kmer) {
+    combine = kmer + rc_kmer;
+  } else {
+    combine = rc_kmer + kmer;
+  }
+  return(hashlittle(combine.c_str(), combine.length(), 0));
 }
 
 bool KMerge::addHashAndCount(std::vector<uint>& hashes, std::vector<uint>& counts, uint kmer_hash_val, uint kmer_count) {
@@ -44,6 +50,60 @@ bool KMerge::addHashAndCount(std::vector<uint>& hashes, std::vector<uint>& count
   } else {
     counts[pos] += kmer_count;
   }
+  return true;
+}
+
+bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_hash_val, uint kmer_count) {
+  if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) { //first time seeing hash val
+    hashed_counts[kmer_hash_val] = kmer_count;
+  } else { // add to running count
+    hashed_counts[kmer_hash_val] += kmer_count;
+  }
+
+  return true;
+}
+
+bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
+  //char *c_filename = new char[filename.length()];
+  std::map<std::string, uint> gka_counts;
+  
+
+  //uint len = filename.copy(c_filename, filename.length());
+  //c_filename[len] = '\0';
+
+  // Building the index 
+  gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 0 /*not specifying read length*/, true /* stranded counting (rev comp counted seperately)*/);
+
+  gkarrays::readIterator *read_iter = genome->getReads()->begin();
+  uint i = 0, num_iterations = 0;
+  bool all_kmers_found = false;
+  while (!read_iter->isFinished() && !all_kmers_found) {
+    uint *support = genome->getSupport(i);
+    for(uint j = 0; j < genome->getSupportLength(i); j++) {
+      num_iterations++;
+      char *kmer = genome->getTagFactor(i, j, k);
+      if (gka_counts.count(kmer) == 0) {
+	if(!KMerge::add_hash_and_count(hashed_counts, KMerge::hash_kmer(kmer), support[j])) {
+	  return false;
+	}
+      }
+      if (genome->getGkCFALength() == gka_counts.size()) {
+        all_kmers_found = true;
+	delete [] kmer;
+	delete [] support;
+        break;
+      }
+      delete [] kmer;
+    }
+    delete [] support;
+    ++(*read_iter);
+    i++;
+  }
+
+  delete read_iter;
+  delete genome;
+  //delete [] c_filename;
+
   return true;
 }
 

@@ -30,7 +30,7 @@ using namespace H5;
 #endif
 
 TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
-  std::map<std::string, int> gka_counts;
+  std::map<std::string, uint> gka_counts;
   // Default k-mer length
   int k = 5;
 
@@ -56,8 +56,8 @@ TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
 	gka_counts[kmer] = support[j];
       }
       if (genome->getGkCFALength() == gka_counts.size()) {
-	cout << "Breaking early" << endl;
-	all_kmers_found = false;
+	cout << "Breaking early (iteration = " << num_iterations << ")" << endl;
+	all_kmers_found = true;
 	break;
       }
       delete [] kmer;
@@ -67,19 +67,17 @@ TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
     i++;
   }
 
-  cout << "Number of iterations " << num_iterations << endl;
-
   // compare to jellyfish results
   // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz
   // ~/bin/jellyfish count -m 5 -o output -s 10000 -C <(zcat genome.test.contig.fa.gz)
   // ~/bin/jellyfish dump -c output > genome.test.kmers.txt
 
-  std::string k_seq;
-  int kmer_count;
+  std::string seq;
+  uint count;
   if (in_file.is_open()) {
     while ( !in_file.eof() ) {
-      in_file >> k_seq >> kmer_count;
-      REQUIRE(gka_counts[k_seq] == kmer_count);
+      in_file >> seq >> count;
+      REQUIRE(gka_counts[seq] == count);
     }
     in_file.close();
   }
@@ -94,6 +92,7 @@ TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
    */
 
   // Free memory.
+  delete read_iter;
   delete genome;
 }
 
@@ -104,98 +103,18 @@ TEST_CASE("ReverseComplementTest", "[HashTest]") {
   REQUIRE(rc_test_seq == "CTAGT");
 }
 
-/*TEST_CASE_METHOD(HashTestFixture, "AddAnotherOrganism", "[HashTest]") {
-  std::vector<uint> hashes;
-  std::vector<uint> counts;
+TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") {
+  std::string test_seq("ACTAG");
+  std::string rc_test_seq(test_seq.c_str());
+  reverseComplement(rc_test_seq);
 
-  const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/k3.counts.gz");
-
-  const H5std_string GROUP_NAME( "/org2" );
-  const H5std_string HASH_DATASET_NAME( "/org2/kmer_hash" );
-  const H5std_string COUNT_DATASET_NAME( "/org2/count" );
-  std::vector<uint>::iterator iter;
-
-  try {
-
-    bool success = this->kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashes, counts);
-    REQUIRE(success == true);
-
-    REQUIRE(hashes.size() == 64);
-    REQUIRE(counts.size() == 64);
-
-    const string kmer0("AAA");
-    const string kmer63("TTT");
-    const uint kmer0_count = 95944;
-    const uint kmer63_count = 99230;
-
-    REQUIRE(hashes[0] == KMerge::hashKmer(kmer0));
-    REQUIRE(hashes[63] == KMerge::hashKmer(kmer63));
-    REQUIRE(counts[0] == kmer0_count);
-    REQUIRE(counts[63] == kmer63_count);
-
-    this->kmerge->addDatasetToHDF5File(GROUP_NAME, HASH_DATASET_NAME, hashes.size(), &hashes[0], true);
-    this->kmerge->addDatasetToHDF5File(GROUP_NAME, COUNT_DATASET_NAME, counts.size(), &counts[0], false);
-
-
-    std::vector<uint> hashes2 = this->kmerge->getDatasetFromHDF5File<uint>(HASH_DATASET_NAME, PredType::NATIVE_UINT);
-    std::vector<uint> counts2 = this->kmerge->getDatasetFromHDF5File<uint>(COUNT_DATASET_NAME, PredType::NATIVE_UINT);
-
-
-
-    REQUIRE(hashes2.size() == 64);
-    REQUIRE(counts2.size() == 64);
-
-
-    uint pos = 0;
-    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
-      if (*iter==KMerge::hashKmer(kmer0)) {
-        break;
-      }
-      pos++;
-    }
-    REQUIRE(iter != hashes2.end());
-    REQUIRE(counts2[pos] == kmer0_count);
-
-    pos = 0;
-
-    for (iter=hashes2.begin(); iter!=hashes2.end(); iter++) {
-      if (*iter==KMerge::hashKmer(kmer63)) {
-        break;
-      }
-      pos++;
-    }
-
-    REQUIRE(iter != hashes2.end());
-    REQUIRE(counts2[pos] == kmer63_count);
-
-    REQUIRE(counts == counts2);
-    REQUIRE(hashes == hashes2);
-
-
-  }
-  catch( FileIException error ) {
-    error.printError();
-    cout << "File error" << std::endl;
-  }
-
-  // catch failure caused by the DataSet operations                                                                                                                                                                  
-  catch( DataSetIException error ) {
-    error.printError();
-    cout << "Dataset error" << std::endl;
-  }
-
-  // catch failure caused by the DataSpace operations                                                                                                                                                                
-  catch( DataSpaceIException error ) {
-    error.printError();
-    cout << "Dataspace error" << std::endl;
-  }
-
-
+  uint hash1 = KMerge::hash_kmer(test_seq), hash2 = KMerge::hash_kmer(rc_test_seq);
+  REQUIRE(hash1 == hash2);
 }
-*/
+
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
-  std::vector<uint> hashes;
+  /*std::vector<uint> hashes;
   std::vector<uint> counts;
   std::map<uint, uint> hashed_counts;
 
@@ -206,11 +125,22 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   const H5std_string HASH_DATASET_NAME( "/org1/kmer_hash" );
   const H5std_string COUNT_DATASET_NAME( "/org1/count" );
   std::vector<uint>::iterator iter;
+  */
 
+  uint k = 5;
+  std::map<uint, uint> hashed_counts;
+  std::string filename("genome.test.contig.fa.gz");
 
   try {
-    KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
-  
+    bool success = KMerge::count_hashed_kmers(filename, k, hashed_counts);
+    REQUIRE(success == true);
+    REQUIRE(hashed_counts.size() == 324);
+  } catch (exception &e) {
+    cout << e.what() << endl;
+  } 
+
+    /*KMerge* kmerge = new KMerge(HDF5_FILE_NAME);
+    
     bool success = kmerge->parseKmerCountsFile(KMER_COUNT_FILE_NAME, hashed_counts);
     REQUIRE(success == true);
 
@@ -313,7 +243,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
       perror( "Error deleting file");
     }
-  }
+    }*/
 }
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
