@@ -53,24 +53,29 @@ bool KMerge::addHashAndCount(std::vector<uint>& hashes, std::vector<uint>& count
   return true;
 }
 
-bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_hash_val, uint kmer_count) {
-  if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) { //first time seeing hash val
-    hashed_counts[kmer_hash_val] = kmer_count;
-  } else { // add to running count
-    hashed_counts[kmer_hash_val] += kmer_count;
+bool KMerge::add_hash_and_count(std::vector<uint>& hashes, std::vector<uint>& counts, uint kmer_hash_val, uint kmer_count) {
+  std::vector<uint>::iterator iter;
+  uint pos = 0;        
+
+  for (iter=hashes.begin(); iter!=hashes.end(); iter++) { 
+    if (*iter==kmer_hash_val) {
+      break;
+    }
+    pos++;
   }
+  if (iter == hashes.end()) {
+    hashes.push_back(kmer_hash_val);
+    counts.push_back(kmer_count);
+  } else {
+    counts[pos] += kmer_count;
+  }
+
 
   return true;
 }
 
-bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
-  //char *c_filename = new char[filename.length()];
-  std::map<std::string, uint> gka_counts;
-  
-
-  //uint len = filename.copy(c_filename, filename.length());
-  //c_filename[len] = '\0';
-
+bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::vector<uint>& hashes, std::vector<uint>& counts) {
+  std::set<std::string> kmers;
   // Building the index 
   gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 0 /*not specifying read length*/, true /* stranded counting (rev comp counted seperately)*/);
 
@@ -82,15 +87,15 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
     for(uint j = 0; j < genome->getSupportLength(i); j++) {
       num_iterations++;
       char *kmer = genome->getTagFactor(i, j, k);
-      if (gka_counts.count(kmer) == 0) {
-	if(!KMerge::add_hash_and_count(hashed_counts, KMerge::hash_kmer(kmer), support[j])) {
+      if (kmers.find(kmer) == kmers.end()) {
+	kmers.insert(kmer);
+	if(!KMerge::add_hash_and_count(hashes, counts, KMerge::hash_kmer(kmer), support[j])) {
 	  return false;
 	}
       }
-      if (genome->getGkCFALength() == gka_counts.size()) {
+      if (genome->getGkCFALength() == kmers.size()) { //we've seen all kmers in the genome
         all_kmers_found = true;
 	delete [] kmer;
-	delete [] support;
         break;
       }
       delete [] kmer;
@@ -102,7 +107,6 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
 
   delete read_iter;
   delete genome;
-  //delete [] c_filename;
 
   return true;
 }
@@ -186,6 +190,15 @@ bool KMerge::parseKmerCountsFile(const std::string& counts_file_name, std::map<u
   return true;
 
 }
+
+/*add_dataset {
+  make std::map out of hashes and counts (sorts hashes and keeps them associated to their counts
+
+  iterate over map and store hashes and counts from the map
+  
+  write to file
+
+}*/
 
 bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_string& ds_name, const hsize_t data_size, const uint* data, const bool create_group = false) {
   ifstream ifile(this->file_name.c_str());

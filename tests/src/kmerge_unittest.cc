@@ -114,9 +114,9 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
 
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
-  /*std::vector<uint> hashes;
+  std::vector<uint> hashes;
   std::vector<uint> counts;
-  std::map<uint, uint> hashed_counts;
+  /*std::map<uint, uint> hashed_counts;
 
   const std::string KMER_COUNT_FILE_NAME("/home/darryl/Development/kmerge/tests/k3.counts.gz");
 
@@ -128,13 +128,12 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   */
 
   uint k = 5;
-  std::map<uint, uint> hashed_counts;
   std::string filename("genome.test.contig.fa.gz");
 
   try {
-    bool success = KMerge::count_hashed_kmers(filename, k, hashed_counts);
+    bool success = KMerge::count_hashed_kmers(filename, k, hashes, counts);
     REQUIRE(success == true);
-    REQUIRE(hashed_counts.size() == 324);
+    REQUIRE(hashes.size() == 324);
   } catch (exception &e) {
     cout << e.what() << endl;
   } 
