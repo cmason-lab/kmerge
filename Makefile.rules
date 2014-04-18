@@ -3,7 +3,7 @@ HOME_DIR=/home/darryl
 DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
 CXX=/home/darryl/hdf5/bin/h5c++ 
 CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
-LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz -lGkArrays -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi  -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit
+LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz -lGkArrays -lcityhash -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi  -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit
 CXXFLAGS += -I $(HOME_DIR)/include -I $(HOME_DIR)/hdf5/include -D_NOMPI
 CXXFLAGS += -I $(HOME_DIR)/Development/include -I $(HOME_DIR)/Development/seqan-trunk/core/include -I $(HOME_DIR)/Development/seqan-trunk/extras/include
 CXXFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include
@@ -12,15 +12,22 @@ default: all
 all: kmerge
 
 kmerge: main.o
-	$(CXX) $(LDFLAGS) main.o kmerge.o $(HOME_DIR)/include/dlib/all/source.cpp -o kmerge
+	$(CXX) $(LDFLAGS) main.o kmerge.o spookyV2.o murmur_hash.o $(HOME_DIR)/include/dlib/all/source.cpp -o kmerge
 
 main.o: kmerge.o $(SRC)/main.cc
 	$(CXX) $(CXXFLAGS) kmerge.o -c $(SRC)/main.cc $(LDFLAGS)
 
-kmerge.o: $(SRC)/kmerge.h $(SRC)/kmerge.cc
-	$(CXX) $(CXXFLAGS) -c $(SRC)/kmerge.cc $(LDFLAGS)
+kmerge.o: spookyV2.o murmur_hash.o $(SRC)/kmerge.h $(SRC)/kmerge.cc
+	$(CXX) $(CXXFLAGS) spookyV2.o murmur_hash.o -c $(SRC)/kmerge.cc $(LDFLAGS)
+
+spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp -o $@ $(LDFLAGS)
+
+murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp -o $@ $(LDFLAGS)
+
 
 clean:
-	rm -f main.o main kmerge.o kmerge
+	rm -f *.o kmerge
 
 .PHONY: default all clean

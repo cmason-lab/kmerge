@@ -28,6 +28,8 @@ int main(int argc, char const ** argv) {
   setHelpText(parser, 3, "Full path to location containing directories of sequences and taxonomy information");
   addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
 					  ArgParseArgument::INTEGER, "INT"));
+  addOption(parser, ArgParseOption("h", "hash_func", "Hash function to use for k-mers",
+				   ArgParseArgument::INTEGER, "STRING"));
   setMinValue(parser, "t", "1");
   setMaxValue(parser, "t", "80");
 
@@ -42,14 +44,18 @@ int main(int argc, char const ** argv) {
 
   uint k_val_start = 0;
   uint k_val_end = 0;
-  std::string hdf5_filename, seq_dir;
+  std::string hdf5_filename, seq_dir, hash_func = "lookup3";
   uint num_threads = 1;
+
   getArgumentValue(hdf5_filename, parser, 0);
   getArgumentValue(k_val_start, parser, 1);
   getArgumentValue(k_val_end, parser, 2);
   getArgumentValue(seq_dir, parser, 3);
   if (isSet(parser, "t")) {
     getOptionValue(num_threads, parser, "t");
+  }
+  if (isSet(parser, "h")) {
+    getOptionValue(hash_func, parser, "h");
   }
 
   if ((k_val_start < 5) || (k_val_end > 31)) {
@@ -70,7 +76,7 @@ int main(int argc, char const ** argv) {
  
   thread_pool tp(num_threads);
   dirp = opendir(seq_dir.c_str());
-  KMerge *kmerge = new KMerge(hdf5_filename);
+  KMerge *kmerge = new KMerge(hdf5_filename, hash_func);
   while ((dp = readdir(dirp)) != NULL) {
     if(stat(dp->d_name, &st) == 0) {
       if (S_ISDIR(st.st_mode)) {

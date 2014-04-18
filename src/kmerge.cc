@@ -1,5 +1,8 @@
 #include "kmerge.h"
 #include "lookup3.c"
+#include "SpookyV2.h"
+#include "MurmurHash3.h"
+#include "city.h"
 #include <seqan/basic.h>
 #include <seqan/sequence.h>
 #include <seqan/file.h>
@@ -10,15 +13,12 @@
 using namespace seqan;
 using namespace std;
 
-#define ROW_SIZE 0
-#define COL_SIZE 1
-#define MAX_INT_VAL 2147483647 //2^31-1
-
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const std::string& filename) {
+KMerge::KMerge (const std::string& filename, const std::string& hash_function) {
   this->filename = filename;
   this->hdf5_file = new HDF5(filename, false);
+  this->hash_function = hash_function;
 }
 
 KMerge::~KMerge() {
@@ -26,6 +26,10 @@ KMerge::~KMerge() {
 }
 
 uint KMerge::hash_kmer(const std::string& kmer) {
+  return KMerge::hash_kmer(kmer, this->hash_function);
+}
+
+uint KMerge::hash_kmer(const std::string& kmer, const std::string& hash_function) {
   string rc_kmer(kmer.c_str()), combine;
   reverseComplement(rc_kmer);
   if (kmer < rc_kmer) {
@@ -33,7 +37,19 @@ uint KMerge::hash_kmer(const std::string& kmer) {
   } else {
     combine = rc_kmer + kmer;
   }
-  return(hashlittle(combine.c_str(), combine.length(), 0));
+  if (hash_function == "lookup3") {
+    return(hashlittle(combine.c_str(), combine.length(), 0));
+  } else if (hash_function == "spooky") {
+    return(SpookyHash::Hash32(combine.c_str(), combine.length(), 0));
+  } else if (hash_function == "murmur") {
+    uint out;
+    MurmurHash3_x86_32  ( combine.c_str(), combine.length(), 0, &out );
+    return out;
+  } else if (hash_function == "city") {
+    return(CityHash32(combine.c_str(), combine.length()));
+  } else {
+    throw "Invalid hash function provided";
+  }
 }
 
 bool KMerge::add_hash_and_count(std::vector<uint>& hashes, std::vector<uint>& counts, uint kmer_hash_val, uint kmer_count) {
@@ -81,7 +97,7 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
       char *kmer = genome->getTagFactor(i, j, k);
       if (kmers.find(kmer) == kmers.end()) {
 	kmers.insert(kmer);
-	if(!KMerge::add_hash_and_count(hashed_counts, KMerge::hash_kmer(kmer), support[j])) {
+	if(!KMerge::add_hash_and_count(hashed_counts, this->hash_kmer(kmer), support[j])) {
 	  throw "Unable to add hash and count";
 	  return false;
 	}
@@ -147,7 +163,7 @@ void KMerge::BuilderTask::execute() {
 
   cout << "Working on " << params.group_name << endl;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) { 
-    if(!(KMerge::count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
+    if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
       error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
       throw error.str();
     } else {

@@ -28,7 +28,7 @@ CXX=/home/darryl/hdf5/bin/h5c++
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -L $(HOME_DIR)/lib -lsz -lGkArrays -L $(HOME_DIR)/lib64 -larmadillo
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -lsz -lGkArrays -L $(HOME_DIR)/lib64 -larmadillo
 
 # House-keeping build targets.
 
@@ -37,11 +37,17 @@ all : $(TESTS)
 clean :
 	rm -f $(TESTS) *.o
 
-kmerge_unittest : kmerge_unittest.o kmerge.o
+kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROGRAM_SRC_DIR)/kmerge.cc -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROGRAM_SRC_DIR)/kmerge.cc -o $@ $(LDFLAGS)
+
+spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp	
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp -o $@ $(LDFLAGS)
+
+murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp -o $@ $(LDFLAGS)
 
 kmerge_unittest.o : $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(LDFLAGS)
