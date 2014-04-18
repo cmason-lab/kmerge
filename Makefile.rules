@@ -3,9 +3,10 @@ HOME_DIR=/home/darryl
 DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
 CXX=/home/darryl/hdf5/bin/h5c++ 
 CXX+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
-LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz
+LDFLAGS+=-L/home/darryl/lib -lm -lz -lrt -lsz -lGkArrays -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi  -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit
 CXXFLAGS += -I $(HOME_DIR)/include -I $(HOME_DIR)/hdf5/include -D_NOMPI
 CXXFLAGS += -I $(HOME_DIR)/Development/include -I $(HOME_DIR)/Development/seqan-trunk/core/include -I $(HOME_DIR)/Development/seqan-trunk/extras/include
+CXXFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include
 
 default: all
 all: kmerge
