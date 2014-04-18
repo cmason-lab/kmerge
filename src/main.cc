@@ -22,16 +22,20 @@ int main(int argc, char const ** argv) {
   setHelpText(parser, 0, "HDF5 file name");
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
   setHelpText(parser, 1, "Start k-mer value >= 5");
+  setMinValue(parser, 1, "5");
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
   setHelpText(parser, 2, "End k-mer value <= 31");
+  setMaxValue(parser, 2, "31");
   addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "STRING"));
   setHelpText(parser, 3, "Full path to location containing directories of sequences and taxonomy information");
   addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
 					  ArgParseArgument::INTEGER, "INT"));
-  addOption(parser, ArgParseOption("h", "hash_func", "Hash function to use for k-mers",
-				   ArgParseArgument::INTEGER, "STRING"));
+  setValidValues(parser, "t", "build analyze");
   setMinValue(parser, "t", "1");
   setMaxValue(parser, "t", "80");
+  addOption(parser, ArgParseOption("h", "hash_func", "Hash function to use for k-mers",
+				   ArgParseArgument::INTEGER, "STRING"));
+  setValidValues(parser, "h", "lookup3 spooky murmur city");
 
   //Parse command line.
   ArgumentParser::ParseResult res = parse(parser, argc, argv);
@@ -56,11 +60,6 @@ int main(int argc, char const ** argv) {
   }
   if (isSet(parser, "h")) {
     getOptionValue(hash_func, parser, "h");
-  }
-
-  if ((k_val_start < 5) || (k_val_end > 31)) {
-    std::cerr << "k-mer range is out of bounds" << std::endl << "k must be between 5 and 31 (inclusive)" << std::endl;
-    return 1;
   }
   
   struct stat st;
