@@ -16,9 +16,9 @@ using namespace std;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const H5std_string& file_name) {
-  this->file_name = file_name;
-  this->hdf5_file = new HDF5(file_name, false);
+KMerge::KMerge (const H5std_string& filename) {
+  this->filename = filename;
+  this->hdf5_file = new HDF5(filename, false);
 }
 
 KMerge::~KMerge() {
@@ -250,11 +250,11 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
 }
 
 bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_string& ds_name, const hsize_t data_size, const uint* data, const bool create_group = false) {
-  ifstream ifile(this->file_name.c_str());
+  ifstream ifile(this->filename.c_str());
   if (ifile) {
-    this->file = new H5File( this->file_name, H5F_ACC_RDWR );
+    this->file = new H5File( this->filename, H5F_ACC_RDWR );
   } else {
-    this->file = new H5File( this->file_name, H5F_ACC_TRUNC );
+    this->file = new H5File( this->filename, H5F_ACC_TRUNC );
   }
 
   /*                              
@@ -373,8 +373,6 @@ void KMerge::BuilderTask::execute() {
     }
     error.str("");
   }
-  cout << "Finished parsing: " << file_loc.str() << endl;                                                                                                                                                                                                                                                                                                               
-  cout << "Hashes vector size now: " << hashed_counts.size() << endl;
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     hashes.push_back(iter->first);
     counts.push_back(iter->second);

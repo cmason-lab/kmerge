@@ -27,7 +27,7 @@ class KMerge;
 
 struct param_struct {
   KMerge * kmerge;
-  H5std_string hdf5_file_name;
+  std::string hdf5_filename;
   uint k_val_start;
   uint k_val_end;
   std::string seq_filename;
@@ -40,7 +40,7 @@ struct param_struct {
 
 class KMerge {
  private:
-  H5std_string file_name;
+  H5std_string filename;
   H5File *file;
   HDF5 *hdf5_file;
   static pthread_mutex_t mutex;
@@ -92,7 +92,7 @@ class KMerge {
 
 template <class T>
 std::vector<T> KMerge::getDatasetFromHDF5File(const H5std_string& ds_name, const DataType& dt) {
-  this->file = new H5File( this->file_name, H5F_ACC_RDONLY );
+  this->file = new H5File( this->filename, H5F_ACC_RDONLY );
 
   /*                                                                                                                                                                                                                                                                                                                                                                       
    * Open the specified file and the specified dataset in the file.                                                                                                                                                                                                                                                                                                        
