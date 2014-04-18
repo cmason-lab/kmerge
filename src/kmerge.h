@@ -4,6 +4,8 @@
 #include <iostream>
 #include <pthread.h>
 #include "H5Cpp.h"
+#include "fq.h"
+#include "hdf5file.h"
 
 #ifndef H5_NO_NAMESPACE
 #ifndef H5_NO_STD
@@ -28,9 +30,10 @@ struct param_struct {
   H5std_string hdf5_file_name;
   uint k_val_start;
   uint k_val_end;
-  H5std_string group_name;
+  std::string seq_filename;
+  std::string group_name;
   H5std_string hash_dataset_name;
-  H5std_string count_dataset_name;
+  H5std_string counts_dataset_name;
 } ;
 
 
@@ -39,6 +42,7 @@ class KMerge {
  private:
   H5std_string file_name;
   H5File *file;
+  HDF5 *hdf5_file;
   static pthread_mutex_t mutex;
 
  public:
@@ -51,8 +55,11 @@ class KMerge {
   //static uint hashKmer(const std::string&);
   static int hashKmer(const std::string&);
   static uint hash_kmer(const std::string&);
-  static bool count_hashed_kmers(std::string&, uint, std::vector<uint>&, std::vector<uint>&);
+  static bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
   static bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
+  static bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
+  bool add_dataset(const std::string, uint, const uint*);
+  static bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
   bool addHashAndCount(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool addHashAndCount(std::map<uint, uint>&, uint, uint);
   template <class T>

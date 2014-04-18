@@ -88,7 +88,7 @@ int main(int argc, char const ** argv) {
 	    params.hash_dataset_name = dataset_name.str();
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "count";
-	    params.count_dataset_name = dataset_name.str();
+	    params.counts_dataset_name = dataset_name.str();
 	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
 	    //param_ptrs.push_back(params);
             tp.add_task(*task, &KMerge::BuilderTask::execute);

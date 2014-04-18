@@ -18,6 +18,11 @@ pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 KMerge::KMerge (const H5std_string& file_name) {
   this->file_name = file_name;
+  this->hdf5_file = new HDF5(file_name, false);
+}
+
+KMerge::~KMerge() {
+  delete this->hdf5_file;
 }
 
 int KMerge::hashKmer(const std::string& kMer) {
@@ -74,7 +79,16 @@ bool KMerge::add_hash_and_count(std::vector<uint>& hashes, std::vector<uint>& co
   return true;
 }
 
-bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::vector<uint>& hashes, std::vector<uint>& counts) {
+bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_hash_val, uint kmer_count) {
+  if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) {
+    hashed_counts[kmer_hash_val] = kmer_count;
+  } else {
+    hashed_counts[kmer_hash_val] += kmer_count;
+  }
+  return true;
+}
+
+bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
   std::set<std::string> kmers;
   // Building the index 
   gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 0 /*not specifying read length*/, true /* stranded counting (rev comp counted seperately)*/);
@@ -89,7 +103,9 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::vector<uint>
       char *kmer = genome->getTagFactor(i, j, k);
       if (kmers.find(kmer) == kmers.end()) {
 	kmers.insert(kmer);
-	if(!KMerge::add_hash_and_count(hashes, counts, KMerge::hash_kmer(kmer), support[j])) {
+	//if(!KMerge::add_hash_and_count(hashes, counts, KMerge::hash_kmer(kmer), support[j])) {
+	if(!KMerge::add_hash_and_count(hashed_counts, KMerge::hash_kmer(kmer), support[j])) {
+	  throw "Unable to add hash and count";
 	  return false;
 	}
       }
@@ -200,6 +216,39 @@ bool KMerge::parseKmerCountsFile(const std::string& counts_file_name, std::map<u
 
 }*/
 
+bool KMerge::add_dataset(const std::string dataset_path, uint data_size, const uint* data) {
+  std::vector<uint64_t> dims;
+
+  dims.push_back(data_size);
+  if (!(this->hdf5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
+    throw "Unable to create dataset";
+    return false;
+  }
+  if (!(this->hdf5_file->setData(dataset_path, data))) {
+    throw "Unable to set data for dataset";
+    return false;
+  }
+
+  return true;
+}
+
+bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<uint>& counts) {
+  std::map<uint, uint> sorter;
+
+  std::transform( hashes.begin(), hashes.end(), counts.begin(),
+		  std::inserter(sorter, sorter.end() ), std::make_pair<uint,int> );
+  
+  //clear hashes and counts and associated memory
+  std::vector<uint>().swap( hashes );
+  std::vector<uint>().swap( counts );
+
+  for (std::map<uint, uint>::const_iterator iter = sorter.begin(); iter != sorter.end(); iter++) {
+    hashes.push_back(iter->first);
+    counts.push_back(iter->second);
+  }
+  return true;
+}
+
 bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_string& ds_name, const hsize_t data_size, const uint* data, const bool create_group = false) {
   ifstream ifile(this->file_name.c_str());
   if (ifile) {
@@ -261,7 +310,7 @@ bool KMerge::addDatasetToHDF5File(const H5std_string& group_name, const H5std_st
 
   return true;
 }
-
+/*
 void KMerge::parseAndWriteInThread(const param_struct& params) {
   //param_struct * params = (param_struct*) arg;
   stringstream file_name, file_loc;
@@ -305,48 +354,48 @@ void KMerge::parseAndWriteInThread(const param_struct& params) {
 
   return;
 }
-
+*/
 
 void KMerge::BuilderTask::execute() {
-  stringstream file_name, file_loc;
+  stringstream file_name, file_loc, error;
   map<uint, uint> hashed_counts;
   vector<uint> hashes;
   vector<uint> counts;
 
   cout << "Working on " << params.group_name << endl;
-
-  for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
-    file_name.str("");
-    file_name << "k" << k << ".counts.gz";
-    file_loc.str("");
-    file_loc << params.group_name << "/" << file_name.str();
-
-    if (!(params.kmerge->parseKmerCountsFile(file_loc.str(), hashed_counts))) {
-      cerr << "Unable to parse: " << file_loc.str() << endl;
+  for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) { 
+    if(!(KMerge::count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
+      error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
+      throw error.str();
     } else {
-      cout << "Finished parsing: " << file_loc.str() << endl;
-      cout << "Hashes vector size now: " << hashed_counts.size() << endl;
+      cout << "Finished parsing: " << params.seq_filename << " for k=" << k << std::endl;
+      cout << "Hashes vector size now: " << hashed_counts.size() << std::endl;  
     }
+    error.str("");
   }
+  cout << "Finished parsing: " << file_loc.str() << endl;                                                                                                                                                                                                                                                                                                               
+  cout << "Hashes vector size now: " << hashed_counts.size() << endl;
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     hashes.push_back(iter->first);
     counts.push_back(iter->second);
   }
-  // remove all elements from map as they are no longer needed                                                                                                                                                                                                                                                                                                              
+  // remove all elements from map as they are no longer needed
   hashed_counts.clear();
   pthread_mutex_lock( &KMerge::mutex );
-  if(!(params.kmerge->addDatasetToHDF5File(params.group_name, params.hash_dataset_name, hashes.size(), &hashes[0], true))) {
-    cerr << "Unable to add hashes for " << params.group_name << endl;
+
+  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0]))) {
+    error << "Unable to add hashes for " << params.group_name << endl;
+    throw error.str();
   }
-  if(!(params.kmerge->addDatasetToHDF5File(params.group_name, params.count_dataset_name, counts.size(), &counts[0], false))) {
-    cerr << "Unable to add counts for " << params.group_name << endl;
+  if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0]))) {
+    error << "Unable to add counts for " << params.group_name << endl;
+    throw error.str();
   }
   pthread_mutex_unlock( &KMerge::mutex );
   cout << hashes.size() << " k-mer hashes for " << params.group_name << endl;
   hashes.clear();
   counts.clear();
   cout << "Done (" << params.group_name  << ")" << endl;
-
   return;
 
 }
@@ -356,7 +405,4 @@ std::vector<std::string> getGroupsFromHDF5File(const int& count) {
   //otherwise return a vector with count number of groups
 
   //http://www.hdfgroup.org/ftp/HDF5/examples/examples-by-api/hdf5-examples/1_8/C/H5G/h5ex_g_traverse.c
-}
-
-KMerge::~KMerge () {
 }
