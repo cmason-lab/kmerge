@@ -30,12 +30,11 @@ int main(int argc, char const ** argv) {
   setHelpText(parser, 3, "Full path to location containing directories of sequences and taxonomy information");
   addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
 					  ArgParseArgument::INTEGER, "INT"));
-  setValidValues(parser, "t", "build analyze");
   setMinValue(parser, "t", "1");
   setMaxValue(parser, "t", "80");
-  addOption(parser, ArgParseOption("h", "hash_func", "Hash function to use for k-mers",
-				   ArgParseArgument::INTEGER, "STRING"));
-  setValidValues(parser, "h", "lookup3 spooky murmur city");
+  addOption(parser, ArgParseOption("f", "hash_func", "Hash function to use for k-mers",
+				   ArgParseArgument::STRING, "STRING"));
+  setValidValues(parser, "f", "lookup3 spooky murmur city");
 
   //Parse command line.
   ArgumentParser::ParseResult res = parse(parser, argc, argv);
@@ -48,7 +47,7 @@ int main(int argc, char const ** argv) {
 
   uint k_val_start = 0;
   uint k_val_end = 0;
-  std::string hdf5_filename, seq_dir, hash_func = "lookup3";
+  std::string hdf5_filename, seq_dir, hash_func("lookup3");
   uint num_threads = 1;
 
   getArgumentValue(hdf5_filename, parser, 0);
@@ -58,8 +57,8 @@ int main(int argc, char const ** argv) {
   if (isSet(parser, "t")) {
     getOptionValue(num_threads, parser, "t");
   }
-  if (isSet(parser, "h")) {
-    getOptionValue(hash_func, parser, "h");
+  if (isSet(parser, "f")) {
+    getOptionValue(hash_func, parser, "f");
   }
   
   struct stat st;
@@ -87,7 +86,7 @@ int main(int argc, char const ** argv) {
 	    params.hdf5_filename = hdf5_filename;
 	    params.k_val_start = k_val_start;
 	    params.k_val_end = k_val_end;
-	    params.group_name = s_org;
+	    params.group_name = std::string("/") + s_org;
 	    seq_filename.str("");
 	    seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz" << endl;
 	    params.seq_filename = seq_filename.str();

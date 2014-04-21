@@ -6,3 +6,7 @@ release/kmerge
 tests/15660
 tests/165199
 tests/29309
+*.db
+*.h5
+tests/kmerge_unittest
+*.bak

@@ -84,8 +84,10 @@ bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_h
 
 bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
   std::set<std::string> kmers;
-  // Building the index 
-  gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 0 /*not specifying read length*/, true /* stranded counting (rev comp counted seperately)*/);
+  // Building the index
+  gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 
+						      0 /*not specifying read length*/, 
+						      true /* stranded counting (rev comp counted seperately)*/);
 
   gkarrays::readIterator *read_iter = genome->getReads()->begin();
   uint i = 0, num_iterations = 0;
