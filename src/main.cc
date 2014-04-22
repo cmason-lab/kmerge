@@ -88,7 +88,7 @@ int main(int argc, char const ** argv) {
 	    params.k_val_end = k_val_end;
 	    params.group_name = std::string("/") + s_org;
 	    seq_filename.str("");
-	    seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz" << endl;
+	    seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz";
 	    params.seq_filename = seq_filename.str();
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "kmer_hash";
@@ -108,7 +108,6 @@ int main(int argc, char const ** argv) {
     }
   }
   tp.wait_for_all_tasks();
-  
   for (vector<KMerge::BuilderTask*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
     delete *iter;
   }

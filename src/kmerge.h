@@ -11,6 +11,8 @@
 
 using namespace std;
 
+enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY };
+
 typedef unsigned int uint;
 
 class KMerge;
@@ -27,27 +29,21 @@ struct param_struct {
 } ;
 
 
-
 class KMerge {
  private:
-  std::string filename;
   HDF5 *hdf5_file;
+  HashEnumType hash_type;
   static pthread_mutex_t mutex;
-  std::string hash_function;
 
  public:
-  static const uint GZIP_BEST_COMPRESSION = 9;
-
-
   KMerge(const std::string&, const std::string&);
   ~KMerge();
-  static uint hash_kmer(const std::string&, const std::string&);
-  uint hash_kmer(const std::string&);
   bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
-  static bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
-  static bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
   bool add_dataset(const std::string, uint, const uint*);
-  static bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
+  uint hash_kmer(const std::string&);
+  bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
+  bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
+  bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {
     public:
@@ -63,3 +59,4 @@ class KMerge {
       }
   };
 };
+

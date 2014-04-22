@@ -15,10 +15,21 @@ using namespace std;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const std::string& filename, const std::string& hash_function) {
-  this->filename = filename;
+KMerge::KMerge (const std::string& filename, const std::string& hash_func) {
   this->hdf5_file = new HDF5(filename, false);
-  this->hash_function = hash_function;
+  
+  if (hash_func == "lookup3") {
+    this->hash_type = LOOKUP3;
+  } else if (hash_func == "spooky") {
+    this->hash_type = SPOOKY;
+  } else if (hash_func == "murmur") {
+    this->hash_type = MURMUR;
+  } else if (hash_func == "city") {
+    this->hash_type = CITY;
+  } else {
+    throw "Invalid hash function provided";
+  }
+
 }
 
 KMerge::~KMerge() {
@@ -26,10 +37,6 @@ KMerge::~KMerge() {
 }
 
 uint KMerge::hash_kmer(const std::string& kmer) {
-  return KMerge::hash_kmer(kmer, this->hash_function);
-}
-
-uint KMerge::hash_kmer(const std::string& kmer, const std::string& hash_function) {
   string rc_kmer(kmer.c_str()), combine;
   reverseComplement(rc_kmer);
   if (kmer < rc_kmer) {
@@ -37,17 +44,19 @@ uint KMerge::hash_kmer(const std::string& kmer, const std::string& hash_function
   } else {
     combine = rc_kmer + kmer;
   }
-  if (hash_function == "lookup3") {
+
+  switch (this->hash_type) {
+  case LOOKUP3:
     return(hashlittle(combine.c_str(), combine.length(), 0));
-  } else if (hash_function == "spooky") {
+  case SPOOKY:
     return(SpookyHash::Hash32(combine.c_str(), combine.length(), 0));
-  } else if (hash_function == "murmur") {
+  case MURMUR:
     uint out;
     MurmurHash3_x86_32  ( combine.c_str(), combine.length(), 0, &out );
     return out;
-  } else if (hash_function == "city") {
+  case CITY:
     return(CityHash32(combine.c_str(), combine.length()));
-  } else {
+  default:
     throw "Invalid hash function provided";
   }
 }
@@ -88,7 +97,6 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
   gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 
 						      0 /*not specifying read length*/, 
 						      true /* stranded counting (rev comp counted seperately)*/);
-
   gkarrays::readIterator *read_iter = genome->getReads()->begin();
   uint i = 0, num_iterations = 0;
   bool all_kmers_found = false;
@@ -99,7 +107,7 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
       char *kmer = genome->getTagFactor(i, j, k);
       if (kmers.find(kmer) == kmers.end()) {
 	kmers.insert(kmer);
-	if(!KMerge::add_hash_and_count(hashed_counts, this->hash_kmer(kmer), support[j])) {
+	if(!this->add_hash_and_count(hashed_counts, this->hash_kmer(kmer), support[j])) {
 	  throw "Unable to add hash and count";
 	  return false;
 	}
@@ -126,6 +134,7 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
 
 bool KMerge::add_dataset(const std::string dataset_path, uint data_size, const uint* data) {
   std::vector<uint64_t> dims;
+
 
   dims.push_back(data_size);
   if (!(this->hdf5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
@@ -180,6 +189,7 @@ void KMerge::BuilderTask::execute() {
   }
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
+
   pthread_mutex_lock( &KMerge::mutex );
 
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0]))) {
@@ -191,6 +201,7 @@ void KMerge::BuilderTask::execute() {
     throw error.str();
   }
   pthread_mutex_unlock( &KMerge::mutex );
+
   cout << hashes.size() << " k-mer hashes for " << params.group_name << endl;
   hashes.clear();
   counts.clear();

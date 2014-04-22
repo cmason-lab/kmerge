@@ -98,9 +98,12 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   std::string test_seq("ACTAG");
   std::string rc_test_seq(test_seq.c_str());
   reverseComplement(rc_test_seq);
-
-  uint hash1 = KMerge::hash_kmer(test_seq, "lookup3"), hash2 = KMerge::hash_kmer(rc_test_seq, "lookup3");
+  
+  KMerge *kmerge = new KMerge("dummy.h5", "lookup3");
+  
+  uint hash1 = kmerge->hash_kmer(test_seq), hash2 = kmerge->hash_kmer(rc_test_seq);
   REQUIRE(hash1 == hash2);
+  delete kmerge;
 }
 
 
@@ -151,16 +154,16 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     for (std::vector<uint>::iterator v_iter = hashes.begin(); v_iter != hashes.end(); v_iter++) {
       REQUIRE(*v_iter >= 0);
-      if (*v_iter == KMerge::hash_kmer(kmer1, "lookup3")) {
+      if (*v_iter == kmerge->hash_kmer(kmer1)) {
 	kmer1_pos = pos;
       }
-      if (*v_iter == KMerge::hash_kmer(kmer2, "lookup3")) {                                                                                                                                                                                                                                                                                                                   
+      if (*v_iter == kmerge->hash_kmer(kmer2)) {                                                                                                                                                                                                                                                                                                                   
         kmer2_pos = pos;                                                                                                                                                                                                                                                                                                                                                  
       }  
       pos++;
     }
     REQUIRE(kmer1_pos == kmer2_pos);
-    REQUIRE(hashes[kmer1_pos] == KMerge::hash_kmer(kmer2, "lookup3"));
+    REQUIRE(hashes[kmer1_pos] == kmerge->hash_kmer(kmer2));
     REQUIRE(counts[kmer2_pos] == kmer1_count + kmer2_count);
 
     
@@ -182,14 +185,10 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
       exit(EXIT_FAILURE);
     }
     
-    if (!(sample->getVariableInfo(sample_counts_dataset_name, sample_counts_dataset_name, dims, &type, sample_var_path))) {
-      cerr << "Cannot access sample variable information." << endl;
-      exit(EXIT_FAILURE);
-    }
     counts_arr = new uint[dims[0]];
 
     if(!(sample->getData("count", counts_arr, &sample_var_path[0]))) {
-      cerr << "Cannot access sample hashes" << endl;
+      cerr << "Cannot access sample counts" << endl;
       exit(EXIT_FAILURE);
     }
 
@@ -276,7 +275,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     tp.wait_for_all_tasks();
 
-    delete kmerge;
 
     FastQuery *sample = new FastQuery(params1.hdf5_filename, FQ::FQ_HDF5);
 
@@ -306,16 +304,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 855 /*GCGAT*/ + 892 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
         kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, "lookup3"));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, "lookup3"));
+    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
+    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -341,16 +339,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 618 /*GCGAT*/ + 725 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
         kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, "lookup3"));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, "lookup3"));
+    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
+    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -375,16 +373,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 191 /*GCGAT*/ + 170 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
 	kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, "lookup3")) {
+      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, "lookup3"));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, "lookup3"));
+    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
+    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -393,6 +391,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     delete sample;
 
+    delete kmerge;
     
     if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
       perror( "Error deleting file");
