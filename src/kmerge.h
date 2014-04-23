@@ -8,6 +8,7 @@
 
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
+#define THROTTLE_KMER_LENGTH 19 //lock k-mer counting above this value to throttle memory allocation for longer k-mers
 
 using namespace std;
 
@@ -34,6 +35,7 @@ class KMerge {
   HDF5 *hdf5_file;
   HashEnumType hash_type;
   static pthread_mutex_t mutex;
+  static pthread_mutex_t mem_mutex;
 
  public:
   KMerge(const std::string&, const std::string&);

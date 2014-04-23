@@ -240,20 +240,20 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
   params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
 
-  params1.seq_filename = "/home/darryl/Development/kmerge/tests/15660/15660.fasta.gz";
-  params1.group_name = "/15660";
-  params1.hash_dataset_name =  "/15660/kmer_hash";
-  params1.counts_dataset_name = "/15660/count";
+  params1.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/15667/15667.fasta.gz";
+  params1.group_name = "/15667";
+  params1.hash_dataset_name =  "/15667/kmer_hash";
+  params1.counts_dataset_name = "/15667/count";
 
-  params2.seq_filename = "/home/darryl/Development/kmerge/tests/165199/165199.fasta.gz";
-  params2.group_name = "/165199";
-  params2.hash_dataset_name = "/165199/kmer_hash";
-  params2.counts_dataset_name = "/165199/count";
+  params2.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/165193/165193.fasta.gz";
+  params2.group_name = "/165193";
+  params2.hash_dataset_name = "/165193/kmer_hash";
+  params2.counts_dataset_name = "/165193/count";
 
-  params3.seq_filename = "/home/darryl/Development/kmerge/tests/29309/29309.fasta.gz";
-  params3.group_name = "/29309";
-  params3.hash_dataset_name = "/29309/kmer_hash";
-  params3.counts_dataset_name = "/29309/count";
+  params3.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/29363/29363.fasta.gz";
+  params3.group_name = "/29363";
+  params3.hash_dataset_name = "/29363/kmer_hash";
+  params3.counts_dataset_name = "/29363/count";
 
   uint thread_count = 3;
 
@@ -300,8 +300,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       exit(EXIT_FAILURE);
     }
 
-    kmer1_count = 12304 /*AAAAA*/ + 12533 /*TTTTT*/;
-    kmer2_count = 855 /*GCGAT*/ + 892 /*ATCGC*/;
+    kmer1_count = 10816 /*AAAAA*/ + 11439 /*TTTTT*/;
+    kmer2_count = 7617 /*GCGAT*/ + 7672 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
@@ -335,8 +335,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       cerr << "Cannot access sample counts" << endl;
     }
 
-    kmer1_count = 14163 /*AAAAA*/ + 13897 /*TTTTT*/;
-    kmer2_count = 618 /*GCGAT*/ + 725 /*ATCGC*/;
+    kmer1_count = 6910 /*AAAAA*/ + 6830 /*TTTTT*/;
+    kmer2_count = 1881 /*GCGAT*/ + 1926 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
@@ -369,8 +369,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       cerr << "Cannot access sample counts" << endl;
     }
 
-    kmer1_count = 14969 /*AAAAA*/ + 16160 /*TTTTT*/;
-    kmer2_count = 191 /*GCGAT*/ + 170 /*ATCGC*/;
+    kmer1_count = 11579 /*AAAAA*/ + 12074 /*TTTTT*/;
+    kmer2_count = 234 /*GCGAT*/ + 234 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {

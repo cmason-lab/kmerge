@@ -26,8 +26,8 @@ int main(int argc, char const ** argv) {
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
   setHelpText(parser, 2, "End k-mer value <= 31");
   setMaxValue(parser, 2, "31");
-  addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "STRING"));
-  setHelpText(parser, 3, "Full path to location containing directories of sequences and taxonomy information");
+  addOption(parser, ArgParseOption("d", "directory", "Location of sequences and taxonomy directories",
+				     ArgParseArgument::STRING, "STRING"));
   addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
 					  ArgParseArgument::INTEGER, "INT"));
   setMinValue(parser, "t", "1");
@@ -47,13 +47,15 @@ int main(int argc, char const ** argv) {
 
   uint k_val_start = 0;
   uint k_val_end = 0;
-  std::string hdf5_filename, seq_dir, hash_func("lookup3");
+  std::string hdf5_filename, seq_dir("."), hash_func("lookup3");
   uint num_threads = 1;
 
   getArgumentValue(hdf5_filename, parser, 0);
   getArgumentValue(k_val_start, parser, 1);
   getArgumentValue(k_val_end, parser, 2);
-  getArgumentValue(seq_dir, parser, 3);
+  if (isSet(parser, "d")) {
+    getOptionValue(seq_dir, parser, "d");
+  }
   if (isSet(parser, "t")) {
     getOptionValue(num_threads, parser, "t");
   }

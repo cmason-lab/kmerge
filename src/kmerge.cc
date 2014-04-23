@@ -14,6 +14,7 @@ using namespace seqan;
 using namespace std;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t KMerge::mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func) {
   this->hdf5_file = new HDF5(filename, false);
@@ -91,7 +92,7 @@ bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_h
   return true;
 }
 
-bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
+bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts /*, get_raw=false */) {
   std::set<std::string> kmers;
   // Building the index
   gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 
@@ -173,7 +174,9 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint> counts;
 
   cout << "Working on " << params.group_name << endl;
-  for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) { 
+  for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
+    if (k > THROTTLE_KMER_LENGTH) pthread_mutex_lock( &KMerge::mem_mutex ); //throttle memory for longer k-mers
+    //if k = optimal k, also get raw k-mer sequence
     if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
       error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
       throw error.str();
@@ -181,6 +184,7 @@ void KMerge::BuilderTask::execute() {
       cout << "Finished parsing: " << params.seq_filename << " for k=" << k << std::endl;
       cout << "Hashes vector size now: " << hashed_counts.size() << std::endl;  
     }
+    if (k > THROTTLE_KMER_LENGTH) pthread_mutex_unlock( &KMerge::mem_mutex );
     error.str("");
   }
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
