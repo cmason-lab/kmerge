@@ -168,9 +168,9 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc, error;
-  map<uint, uint> hashed_counts;
-  vector<uint> hashes;
-  vector<uint> counts;
+  std::map<uint, uint> hashed_counts;
+  std::vector<uint> hashes;
+  std::vector<uint> counts;
 
   cout << "Working on " << params.group_name << endl;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) { 
@@ -188,7 +188,7 @@ void KMerge::BuilderTask::execute() {
     counts.push_back(iter->second);
   }
   // remove all elements from map as they are no longer needed
-  hashed_counts.clear();
+  std::map<uint, uint>().swap( hashed_counts );
 
   pthread_mutex_lock( &KMerge::mutex );
 
@@ -203,8 +203,9 @@ void KMerge::BuilderTask::execute() {
   pthread_mutex_unlock( &KMerge::mutex );
 
   cout << hashes.size() << " k-mer hashes for " << params.group_name << endl;
-  hashes.clear();
-  counts.clear();
+  // clear memory
+  std::vector<uint>().swap(hashes);
+  std::vector<uint>().swap(counts);
   cout << "Done (" << params.group_name  << ")" << endl;
   return;
 
