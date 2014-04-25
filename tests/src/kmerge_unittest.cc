@@ -1,15 +1,11 @@
 #define CATCH_CONFIG_MAIN
 
 #include <limits.h>
-#include "H5Cpp.h"
 #include "kmerge.h"
 #include <math.h>
-#include "queryProcessor.h"
-#include "indexBuilder.h"
 #include "fq.h"
 #include "hdf5file.h"
 #include "catch.hpp"
-#include "armadillo"
 #include <dlib/threads.h>
 #include <seqan/sequence.h>
 #include <seqan/alignment_free.h>
@@ -457,6 +453,97 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
 
   if (remove("/home/darryl/Development/kmerge/tests/hash.h5" ) != 0) {
+    perror( "Error deleting file");
+  }
+}
+
+TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
+  std::vector<uint64_t> dims;
+  std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), line;
+  std::stringstream path;
+  std::vector<std::string> lines;
+  ifstream in_file("./13838/taxonomy.txt");
+  dims.push_back(0);
+  
+  HDF5 *test = new HDF5(hdf5_filename, false);
+
+  std::string path_root("/13838/taxonomy");
+
+  while (std::getline(in_file, line)) {
+    std::istringstream tokenizer(line);
+    path.str("");
+    path << path_root;
+    while (!tokenizer.eof()) {
+      std::string token;
+      getline(tokenizer, token, '\t');
+      path << "/" << token;
+    }
+    if (!(test->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
+      throw "Unable to add classification";
+    }
+  }
+
+  delete test;
+
+  in_file.clear(); //clear error flags
+  in_file.seekg(0, std::ios::beg); //set the file get pointer back to the beginning
+
+  test = new HDF5(hdf5_filename, false);
+
+  while (std::getline(in_file, line)) {
+    std::istringstream tokenizer(line);
+    std::stringstream path;
+    std::string classification;
+    std::vector<std::string> vars;
+    uint i = 0;
+    while (!tokenizer.eof()) {
+      std::string token;
+      getline(tokenizer, token, '\t');
+      if (i == 0) { // this is taxon                                                                                         
+	path << path_root << "/" << token;
+      } else { // this is classification                                                                                     
+	classification = token;
+      }
+      i++;
+    }
+    if(!test->getAllVariables(path.str(), vars)) {
+      throw "Unable to get variables";
+    }
+    path << "/";
+    vars[0].replace(0, path.str().length(), "");
+    REQUIRE(classification == vars[0]);
+  }
+
+
+  /*  
+      Code for parsing taxonomy from hdf5
+
+      std::vector<std::string> variables;
+  if(!test->getAllVariables(path_root, variables)) {
+    throw "Unable to get variables";
+  }
+
+    for(std::vector<std::string>::iterator iter = variables.begin(); iter != variables.end(); iter++) {
+    std::istringstream tokenizer(*iter);
+    std::stringstream path;
+    std::string classification;
+    std::vector<std::string> vars;
+    uint i = 0;
+    while (!tokenizer.eof()) {
+      std::string token;
+      getline(tokenizer, token, '\/');
+      if (i == 3) { // this is taxon
+	path << path_root << "/" << token;
+      } else if (i == 4) { // this is classification
+	classification = token;
+      }
+      i++;
+      }
+      }*/
+
+  delete test;
+
+  if (remove(&hdf5_filename[0]) != 0) {
     perror( "Error deleting file");
   }
 }
