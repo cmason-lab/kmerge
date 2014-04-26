@@ -95,7 +95,7 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   std::string rc_test_seq(test_seq.c_str());
   reverseComplement(rc_test_seq);
   
-  KMerge *kmerge = new KMerge("dummy.h5", "lookup3");
+  KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
   
   uint hash1 = kmerge->hash_kmer(test_seq), hash2 = kmerge->hash_kmer(rc_test_seq);
   REQUIRE(hash1 == hash2);
@@ -128,7 +128,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   try {
 
-    KMerge* kmerge = new KMerge(HDF5_FILE_NAME, "lookup3");
+    KMerge* kmerge = new KMerge(HDF5_FILE_NAME, "lookup3", ".");
 
     bool success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
     REQUIRE(success == true);
@@ -255,7 +255,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   thread_pool tp(thread_count);
   try {
-    KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3");
+    KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
 
     params1.kmerge = kmerge;
     params2.kmerge = kmerge;
@@ -405,7 +405,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   std::map<uint, uint> hashed_counts;
   std::map<uint, uint>::const_iterator m_iter;
 
-  kmerge = new KMerge(hdf5_filename, "lookup3");
+  kmerge = new KMerge(hdf5_filename, "lookup3", ".");
   bool success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
   REQUIRE(success == true);
 
@@ -417,7 +417,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
   delete kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "spooky");
+  kmerge = new KMerge(hdf5_filename, "spooky", ".");
   success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
   REQUIRE(success == true);
 
@@ -429,7 +429,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
   delete kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "city");
+  kmerge = new KMerge(hdf5_filename, "city", ".");
   success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
   REQUIRE(success == true);
 
@@ -441,7 +441,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
   delete kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "murmur");
+  kmerge = new KMerge(hdf5_filename, "murmur", ".");
   success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
   REQUIRE(success == true);
 
@@ -458,8 +458,11 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 }
 
 TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
-  std::vector<uint64_t> dims;
-  std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), line;
+  std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), group("/13838"); 
+  std::string path_root("/13838/taxonomy"), line;
+  
+
+  /*std::vector<uint64_t> dims;
   std::stringstream path;
   std::vector<std::string> lines;
   ifstream in_file("./13838/taxonomy.txt");
@@ -484,11 +487,20 @@ TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
   }
 
   delete test;
-
+  
   in_file.clear(); //clear error flags
   in_file.seekg(0, std::ios::beg); //set the file get pointer back to the beginning
+  */
 
-  test = new HDF5(hdf5_filename, false);
+  KMerge *kmerge = new KMerge(hdf5_filename, "lookup3", ".");
+
+  kmerge->add_taxonomy(group);
+
+  delete kmerge;
+
+  HDF5 *test = new HDF5(hdf5_filename, false);
+
+  ifstream in_file("./13838/taxonomy.txt");
 
   while (std::getline(in_file, line)) {
     std::istringstream tokenizer(line);
@@ -515,31 +527,6 @@ TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
   }
 
 
-  /*  
-      Code for parsing taxonomy from hdf5
-
-      std::vector<std::string> variables;
-  if(!test->getAllVariables(path_root, variables)) {
-    throw "Unable to get variables";
-  }
-
-    for(std::vector<std::string>::iterator iter = variables.begin(); iter != variables.end(); iter++) {
-    std::istringstream tokenizer(*iter);
-    std::stringstream path;
-    std::string classification;
-    std::vector<std::string> vars;
-    uint i = 0;
-    while (!tokenizer.eof()) {
-      std::string token;
-      getline(tokenizer, token, '\/');
-      if (i == 3) { // this is taxon
-	path << path_root << "/" << token;
-      } else if (i == 4) { // this is classification
-	classification = token;
-      }
-      i++;
-      }
-      }*/
 
   delete test;
 

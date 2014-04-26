@@ -34,14 +34,16 @@ class KMerge {
  private:
   HDF5 *hdf5_file;
   HashEnumType hash_type;
+  std::string dir;
   static pthread_mutex_t mutex;
   static pthread_mutex_t mem_mutex;
 
  public:
-  KMerge(const std::string&, const std::string&);
+  KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*);
+  bool add_taxonomy(const std::string&);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);

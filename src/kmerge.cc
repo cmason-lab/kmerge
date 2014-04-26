@@ -16,9 +16,10 @@ using namespace std;
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t KMerge::mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const std::string& filename, const std::string& hash_func) {
+KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir) {
   this->hdf5_file = new HDF5(filename, false);
-  
+  this->dir = dir;
+
   if (hash_func == "lookup3") {
     this->hash_type = LOOKUP3;
   } else if (hash_func == "spooky") {
@@ -150,6 +151,34 @@ bool KMerge::add_dataset(const std::string dataset_path, uint data_size, const u
   return true;
 }
 
+bool KMerge::add_taxonomy(const std::string& group) {
+  std::stringstream path, in_file_ss, path_root, error;
+  std::vector<std::string> lines;
+  std::vector<uint64_t> dims;
+  std::string line;
+
+  path_root << group << "/taxonomy";
+  in_file_ss << this->dir << path_root.str() << ".txt";
+  ifstream in_file(in_file_ss.str().c_str());
+
+  dims.push_back(0);
+
+  while (std::getline(in_file, line)) {
+    std::istringstream tokenizer(line);
+    path.str("");
+    path << path_root.str();
+    while (!tokenizer.eof()) {
+      std::string token;
+      getline(tokenizer, token, '\t');
+      path << "/" << token;
+    }
+    if (!(this->hdf5_file->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
+      error << "Unable to add classification:" << path.str();
+      throw error.str();
+    }
+  }
+}
+
 bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<uint>& counts) {
   std::map<uint, uint> sorter;
 
@@ -204,6 +233,12 @@ void KMerge::BuilderTask::execute() {
     error << "Unable to add counts for " << params.group_name << endl;
     throw error.str();
   }
+
+  if(!(params.kmerge->add_taxonomy(params.group_name))) {
+    error << "Unable to add classifications for " << params.group_name << endl;
+    throw error.str();
+  }
+
   pthread_mutex_unlock( &KMerge::mutex );
 
   cout << hashes.size() << " k-mer hashes for " << params.group_name << endl;

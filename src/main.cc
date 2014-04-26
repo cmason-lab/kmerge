@@ -76,7 +76,7 @@ int main(int argc, char const ** argv) {
  
   thread_pool tp(num_threads);
   dirp = opendir(seq_dir.c_str());
-  KMerge *kmerge = new KMerge(hdf5_filename, hash_func);
+  KMerge *kmerge = new KMerge(hdf5_filename, hash_func, seq_dir);
   while ((dp = readdir(dirp)) != NULL) {
     if(stat(dp->d_name, &st) == 0) {
       if (S_ISDIR(st.st_mode)) {
