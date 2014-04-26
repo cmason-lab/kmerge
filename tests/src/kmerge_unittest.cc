@@ -219,7 +219,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   FQ::DataType type;
   std::vector<uint64_t> dims;
-  std::string hash_dataset_name("kmer_hash"), counts_dataset_name("count");
+  std::string hash_dataset_name("kmer_hash"), counts_dataset_name("count"), line;
+  ifstream in_file;
 
   const string kmer1("AAAAA");
   const string kmer2("GCGAT");
@@ -317,6 +318,34 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete [] counts_arr;
     delete [] hashes_arr;
 
+    in_file.open("./15667/taxonomy.txt");
+
+    while (std::getline(in_file, line)) {
+      std::istringstream tokenizer(line);
+      std::stringstream path;
+      std::string classification;
+      std::vector<std::string> vars;
+      uint i = 0;
+      while (!tokenizer.eof()) {
+	std::string token;
+	getline(tokenizer, token, '\t');
+	if (i == 0) { // this is taxon                                                                                         
+	  path << "/15667/taxonomy/" << token;
+	} else { // this is classification                                                                                     
+	  classification = token;
+	}
+	i++;
+      }
+      if(!test->getAllVariables(path.str(), vars)) {
+	throw "Unable to get variables";
+      }
+      path << "/";
+      vars[0].replace(0, path.str().length(), "");
+      REQUIRE(classification == vars[0]);
+    }
+
+    in_file.close();
+
     hashes_arr = new uint[dims[0]];
 
     if (!(sample->getData("kmer_hash", hashes_arr, &params2.group_name[0]))) {
@@ -351,6 +380,34 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete [] counts_arr;
     delete [] hashes_arr;
 
+    in_file.open("./165193/taxonomy.txt");
+
+    while (std::getline(in_file, line)) {
+      std::istringstream tokenizer(line);
+      std::stringstream path;
+      std::string classification;
+      std::vector<std::string> vars;
+      uint i = 0;
+      while (!tokenizer.eof()) {
+	std::string token;
+        getline(tokenizer, token, '\t');
+        if (i == 0) { // this is taxon                                                                                         
+          path << "/165193/taxonomy/" << token;
+        } else { // this is classification                                                                                     
+          classification = token;
+        }
+        i++;
+      }
+      if(!test->getAllVariables(path.str(), vars)) {
+        throw "Unable to get variables";
+      }
+      path << "/";
+      vars[0].replace(0, path.str().length(), "");
+      REQUIRE(classification == vars[0]);
+    }
+    
+    in_file.close();
+
     hashes_arr = new uint[dims[0]];
 
     if (!(sample->getData("kmer_hash", hashes_arr, &params3.group_name[0]))) {
@@ -384,6 +441,34 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     delete [] counts_arr;
     delete [] hashes_arr;
+
+    in_file.open("./29363/taxonomy.txt");
+
+    while (std::getline(in_file, line)) {
+      std::istringstream tokenizer(line);
+      std::stringstream path;
+      std::string classification;
+      std::vector<std::string> vars;
+      uint i = 0;
+      while (!tokenizer.eof()) {
+	std::string token;
+        getline(tokenizer, token, '\t');
+        if (i == 0) { // this is taxon                                                                                         
+          path << "/29363/taxonomy/" << token;
+        } else { // this is classification                                                                                     
+          classification = token;
+	}
+        i++;
+      }
+      if(!test->getAllVariables(path.str(), vars)) {
+	throw "Unable to get variables";
+      }
+      path << "/";
+      vars[0].replace(0, path.str().length(), "");
+      REQUIRE(classification == vars[0]);
+    }
+
+    in_file.close();
 
     delete sample;
 
@@ -461,36 +546,6 @@ TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
   std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), group("/13838"); 
   std::string path_root("/13838/taxonomy"), line;
   
-
-  /*std::vector<uint64_t> dims;
-  std::stringstream path;
-  std::vector<std::string> lines;
-  ifstream in_file("./13838/taxonomy.txt");
-  dims.push_back(0);
-  
-  HDF5 *test = new HDF5(hdf5_filename, false);
-
-  std::string path_root("/13838/taxonomy");
-
-  while (std::getline(in_file, line)) {
-    std::istringstream tokenizer(line);
-    path.str("");
-    path << path_root;
-    while (!tokenizer.eof()) {
-      std::string token;
-      getline(tokenizer, token, '\t');
-      path << "/" << token;
-    }
-    if (!(test->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
-      throw "Unable to add classification";
-    }
-  }
-
-  delete test;
-  
-  in_file.clear(); //clear error flags
-  in_file.seekg(0, std::ios::beg); //set the file get pointer back to the beginning
-  */
 
   KMerge *kmerge = new KMerge(hdf5_filename, "lookup3", ".");
 
