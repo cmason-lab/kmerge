@@ -12,7 +12,7 @@ import threadpool
 from bs4 import BeautifulSoup
 from ftplib import FTP
 from urlparse import urlparse
-import glob
+import gzip
 
 class FileType(argparse.FileType):
     def __call__(self, string):
@@ -28,17 +28,18 @@ def download_genome_sequences(base, asm_id):
         summary = Entrez.read(handle)
         handle.close()
         ncbi_pjid = summary['DocumentSummarySet']['DocumentSummary'][0]['RS_BioProjects'][0]['BioprojectId']
-        get_taxonomy(base + ncbi_pjid, ncbi_pjid)
     except Exception as inst:
-        sys.stderr.write("Summary data for linked assembly %s to bioproject %s inaccessible" % (c, ncbi_pjid))
+        sys.stderr.write("Summary data for linked assembly %s to bioproject %s inaccessible\n" % (asm_id, ncbi_pjid))
         return
-        
 
+    os.mkdir(base + ncbi_pjid)
+    get_taxonomy(base + ncbi_pjid, ncbi_pjid)
+    
     soup = None
     try:
         soup = BeautifulSoup(summary['DocumentSummarySet']['DocumentSummary'][0]['Meta'])
     except Exception as inst:
-        sys.stderr.write("Meta data for linked assembly %s to bioproject %s inacessible" % (c, ncbi_pjid))
+        sys.stderr.write("Meta data for linked assembly %s to bioproject %s inacessible\n" % (asm_id, ncbi_pjid))
         return
 
     chr_count = int(soup.find(category="chromosome_count").text)
@@ -48,6 +49,7 @@ def download_genome_sequences(base, asm_id):
     ftp_url = None
     try:
         ftp_url = soup.ftpsites.find(type="GenBank").text
+        print ftp_url
         url_split = urlparse(ftp_url)
         ftp = FTP(url_split.netloc)
         ftp.login()
@@ -61,7 +63,7 @@ def download_genome_sequences(base, asm_id):
                 # writing to StringIO object
                 ftp.retrbinary('RETR ' + filename, sio.write)
             except Exception as inst:
-                sys.stderr.write("Unable to download %s from linked assembly %s to bioproject %s inacessible" % (filename, c, ncbi_pjid))
+                sys.stderr.write("Unable to download %s from linked assembly %s to bioproject %s inacessible\n" % (filename, asm_id, ncbi_pjid))
                 return
             f_handle.close()
         # uncompress data
@@ -71,7 +73,7 @@ def download_genome_sequences(base, asm_id):
         zippy.close()
         gzf.close()
     except Exception as inst:
-        sys.stderr.write("GenBank url for linked assembly %s to bioproject %s inacessible" % (c, ncbi_pjid))
+        sys.stderr.write("GenBank url for linked assembly %s to bioproject %s inacessible\n" % (asm_id, ncbi_pjid))
         return
     
 def remove_ambiguous_bases(file_handle, output_filename, seq_format, pat):
@@ -179,13 +181,21 @@ def process_genomes(base, record, seq_format, pat):
     try:
         # write out classifications to taxonomy.txt
         get_taxonomy(d, ncbi_pjid)
-        
+    
         ncid_list = ",".join([ link['Id'] for link in record['LinkSetDb'][0]['Link'] ])
-        handle = Entrez.efetch(db="nuccore", id=ncid_list, rettype=seq_format)
+        handle = Entrez.esearch(db="nucleotide", term='%s[BioProject] AND biomol_genomic[PROP] AND srcdb_refseq[PROP] NOT ALTERNATE_LOCUS[Keyword] NOT FIX_PATCH[Keyword] NOT NOVEL_PATCH[Keyword] NOT CONTIG[Title] NOT SCAFFOLD[Title]' % ncbi_pjid, usehistory='y')
+        results = Entrez.read(handle)
+        #handle = Entrez.efetch(db="nuccore", id=ncid_list, rettype=seq_format)
+        webenv = results["WebEnv"]
+        query_key = results["QueryKey"]
+        count = int(results["Count"])
+        batch_size = 100
         gzf = gzip.GzipFile("%s/%s.fasta.gz" % (d, ncbi_pjid), 'wb')
-        gzf.write(handle.read())
+        for start in range(0,count,batch_size):
+            handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype=seq_format)
+            gzf.write(handle.read())
+            handle.close()
         #remove_ambiguous_bases(handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
-        handle.close()
         gzf.close()
     except Exception as inst:
         sys.stderr.write("!%s!\n" % ncbi_pjid)
@@ -212,18 +222,6 @@ def main():
             ids.append(line.strip())
             
         convert_virus_accessions(ids)
-    
-    elif mode == 'prjnaTOrefseq':
-        ids = []
-        if not args.no_gold:
-            df = pd.read_csv("gold.csv", dtype=object)
-            genomes = df[(df['PROJECT TYPE'] == 'Whole Genome Sequencing') & (df['PROJECT STATUS'] == 'Complete and Published') & (df['AVAILABILITY'] == 'Public') & (df['SEQUENCING STATUS'] == 'Complete')].dropna(subset=['NCBI PROJECT ID'])
-            ids.extend(list(genomes['NCBI PROJECT ID']))
-        if args.i:        
-            for line in args.i:
-                ids.append(line.strip())
-
-        find_refseq_records(ids)
     elif mode == 'download_fasta':
         batch_size = 200
         base = args.dir + "/"
@@ -233,24 +231,24 @@ def main():
         
         
         #non-viruses
-        nv_assembly_ids = []
+        nv_pjids = []
         try:
             nv_handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property])', usehistory="y")
             nv_results = Entrez.read(nv_handle)
             nv_webenv = nv_results["WebEnv"]
             nv_query_key = nv_results["QueryKey"]
             count = int(nv_results["Count"])
+            asm_ids = []
             for start in range(0,count,batch_size):
-                fetch_handle = Entrez.efetch(db="assembly", retstart=start, retmax=batch_size, webenv=nv_webenv, query_key=nv_query_key)
-                nv_assembly_ids.extend(Entrez.read(fetch_handle))
-            except Exception as inst:
-                sys.stderr.write("Error downloading non-virus assembly info in nuccore\n")
-                sys.exit()
+                fetch_handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=nv_webenv, query_key=nv_query_key)
+                nv_summaries = Entrez.read(fetch_handle)
+                nv_pjids.extend([ summary['RS_BioProjects'][0]['BioprojectId'] for summary in nv_summaries['DocumentSummarySet']['DocumentSummary']])
+        except Exception as inst:
+            sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
+            sys.exit()
 
-        for asm_id in nv_assembly_ids:
-            request = threadpool.WorkRequest(download_genome_sequences, args=[base, asm_id])
-            pool.putRequest(request)
-                    
+        print len(nv_pjids)
+            
         #viruses
         v_handle = Entrez.esearch(db="genome", term='(txid29258[Organism:exp] OR txid35237[Organism:exp]) AND complete[Status] AND "RefSeq" AND genome_pubmed[FILT]', usehistory="y")
         v_results = Entrez.read(v_handle)
@@ -263,14 +261,15 @@ def main():
             v_summaries.extend(Entrez.read(fetch_handle))
 
         v_pjids = [ summary['ProjectID'] for summary in v_summaries]
+        pjids = nv_pjids[:2] + v_pjids[:2]
         records = []
-        for split_ids in [ v_pjids[i:i+split_size] for i in range(0, len(v_pjids), split_size) ]:
+        for split_ids in [ pjids[i:i+split_size] for i in range(0, len(pjids), split_size) ]:
             try:
                 handle = Entrez.elink(dbfrom="bioproject", db="nuccore", id=split_ids)
                 records.extend(Entrez.read(handle))
                 handle.close()
             except Exception as inst:
-                sys.stderr.write("Error linking to virus sequences in nuccore\n")
+                sys.stderr.write("Error linking to sequences in nuccore\n")
                 sys.exit()
 
         for record in records:
