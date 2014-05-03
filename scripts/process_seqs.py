@@ -91,16 +91,19 @@ def remove_ambiguous_bases(file_handle, output_filename, seq_format, pat):
     out_file.close()
 
 def get_taxonomy(d, ncbi_pjid):
-    handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=ncbi_pjid)
-    link_record = Entrez.read(handle)
-    tax_id = link_record[0]['LinkSetDb'][0]['Link'][0]['Id']
-    handle = Entrez.efetch(db="taxonomy", id=tax_id)
-    tax_record = Entrez.read(handle)
-    handle.close()
-    tax_file = open("%s/taxonomy.txt" % d, 'w')
-    for taxon in tax_record[0]['LineageEx']:
-        if(taxon['Rank'] != 'no rank'):
-            tax_file.write("%s\t%s\n" % (taxon['Rank'], taxon['ScientificName']))
+    try:
+        handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=ncbi_pjid)
+        link_record = Entrez.read(handle)
+        tax_id = link_record[0]['LinkSetDb'][0]['Link'][0]['Id']
+        handle = Entrez.efetch(db="taxonomy", id=tax_id)
+        tax_record = Entrez.read(handle)
+        handle.close()
+        tax_file = open("%s/taxonomy.txt" % d, 'w')
+        for taxon in tax_record[0]['LineageEx']:
+            if(taxon['Rank'] != 'no rank'):
+                tax_file.write("%s\t%s\n" % (taxon['Rank'], taxon['ScientificName']))
+    except Exception as inst:
+        sys.stderr.write("Error getting taxonomy information for %s\n" % ncbi_pjid)
 
 def convert_virus_accessions(ids, split_size=100):
     # get virus NCBI project ids
@@ -185,18 +188,17 @@ def process_genomes(base, record, seq_format, pat):
         ncid_list = ",".join([ link['Id'] for link in record['LinkSetDb'][0]['Link'] ])
         handle = Entrez.esearch(db="nucleotide", term='%s[BioProject] AND biomol_genomic[PROP] AND srcdb_refseq[PROP] NOT ALTERNATE_LOCUS[Keyword] NOT FIX_PATCH[Keyword] NOT NOVEL_PATCH[Keyword] NOT CONTIG[Title] NOT SCAFFOLD[Title]' % ncbi_pjid, usehistory='y')
         results = Entrez.read(handle)
-        #handle = Entrez.efetch(db="nuccore", id=ncid_list, rettype=seq_format)
         webenv = results["WebEnv"]
         query_key = results["QueryKey"]
         count = int(results["Count"])
         batch_size = 100
-        gzf = gzip.GzipFile("%s/%s.fasta.gz" % (d, ncbi_pjid), 'wb')
+        #gzf = gzip.GzipFile("%s/%s.fasta.gz" % (d, ncbi_pjid), 'wb')
         for start in range(0,count,batch_size):
             handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype=seq_format)
-            gzf.write(handle.read())
+            remove_ambiguous_bases(handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
+            #gzf.write(handle.read())
             handle.close()
-        #remove_ambiguous_bases(handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
-        gzf.close()
+        #gzf.close()
     except Exception as inst:
         sys.stderr.write("!%s!\n" % ncbi_pjid)
         sys.stderr.write("%s\n" % type(inst))
@@ -247,7 +249,6 @@ def main():
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
             sys.exit()
 
-        print len(nv_pjids)
             
         #viruses
         v_handle = Entrez.esearch(db="genome", term='(txid29258[Organism:exp] OR txid35237[Organism:exp]) AND complete[Status] AND "RefSeq" AND genome_pubmed[FILT]', usehistory="y")
@@ -261,7 +262,7 @@ def main():
             v_summaries.extend(Entrez.read(fetch_handle))
 
         v_pjids = [ summary['ProjectID'] for summary in v_summaries]
-        pjids = nv_pjids[:2] + v_pjids[:2]
+        pjids = nv_pjids + v_pjids
         records = []
         for split_ids in [ pjids[i:i+split_size] for i in range(0, len(pjids), split_size) ]:
             try:
