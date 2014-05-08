@@ -21,7 +21,7 @@ while(<>){
         print((($first)?"":"\n").$_."/".$seqNum++."\n");
         $first = 0; # false
     } else {
-        @sequences = split(/N+/, $_);
+        @sequences = split(/N+/i, $_);
         print(shift(@sequences)) unless !@sequences; # whole line could be N
         foreach my $sequence (@sequences){
             print("\n$id/".$seqNum++."\n$sequence");

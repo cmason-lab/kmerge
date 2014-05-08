@@ -1,42 +1,49 @@
 #!/usr/bin/python
 import os, argparse, sys, re
-from Bio import SeqIO
 from Bio import Entrez
-from StringIO import StringIO
-import pandas as pd
-from Bio.SeqRecord import SeqRecord
-from Bio.Alphabet import DNAAlphabet
-from Bio.Seq import Seq
-from Bio import bgzf
 import threadpool
-from bs4 import BeautifulSoup
-from ftplib import FTP
-from urlparse import urlparse
 import urllib2
 import gzip
-import time
 from subprocess32 import check_output, CalledProcessError
 import shutil
 
 class FileType(argparse.FileType):
     def __call__(self, string):
         if string.endswith('.gz'):
-            return bgzf.open(string, 'ab')
+            return gzip.open(string, 'ab')
         return super(FileType, self).__call__(string)
 
     
 def remove_ambiguous_bases(file_handle, output_filename, seq_format, pat):
-    out_file = bgzf.open(output_filename, 'ab')
-    output = StringIO()
-    for record in SeqIO.parse(file_handle, seq_format):
-        sequences = re.split(pat, str(record.seq))
-        seq_num = 0
-        for sequence in sequences:
-            new_rec = SeqRecord(Seq(sequence, DNAAlphabet), description="", id="%s" % (record.id + ("" if len(sequences) == 1 else "/%d" % (seq_num))))
+    id = ""
+    first = True
+    sequences = []
+    seq_num = 0
+       
+    out_file = gzip.open(output_filename, 'wb')
+
+    for line in file_handle:
+        line = line.strip()
+        if not line:
+            # some fasta files contain empty lines
+            return
+        if line[0] == ">":
+            id = line
+            seq_num = 0
+            out_file.write( ("" if first else "\n") + line + "/" + str(seq_num) + "\n")
             seq_num = seq_num+1
-            SeqIO.write(new_rec, output, "fasta")
-    out_file.write(output.getvalue())
-    output.close()
+            first = False
+        else:
+            sequences = re.split(pat, line)
+            if sequences[-1] == '':
+                #algorithm requires that split only return empty strings at front of array
+                sequences.pop()
+            if sequences: # whole line could be N
+                out_file.write("%s" % sequences.pop(0))
+            for sequence in sequences:
+                out_file.write("\n" + id + "/" + str(seq_num) + "\n" + sequence)
+                seq_num = seq_num + 1
+    out_file.write("\n")
     out_file.close()
 
 def get_taxonomy(d, ncbi_pjid):
@@ -65,26 +72,28 @@ def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2)
         if not os.path.isdir(d):
             raise
     seq_count = None
+    results = None
+    try:
+        handle = Entrez.esearch(db="nucleotide", term='%s[BioProject] AND biomol_genomic[PROP] AND srcdb_refseq[PROP] NOT ALTERNATE_LOCUS[Keyword] NOT FIX_PATCH[Keyword] NOT NOVEL_PATCH[Keyword] NOT CONTIG[Title] NOT SCAFFOLD[Title]' % ncbi_pjid, usehistory='y')
+        results = Entrez.read(handle)
+    except Exception as inst:
+        sys.stderr.write("!%s!\n" % ncbi_pjid)
+        sys.stderr.write("%s\n" % type(inst))
+        return
+    webenv = results["WebEnv"]
+    query_key = results["QueryKey"]
+    count = int(results["Count"])
+    batch_size = 100                                                                                                    
     if not retry:
         # write out classifications to taxonomy file
         try:
             get_taxonomy(d, ncbi_pjid)
         except Exception as inst:
-            sys.stderr.write("!%s!: Error getting taxonomy information for %s\n" % ncbi_pjid)
+            sys.stderr.write("!%s!: Error getting taxonomy information\n" % ncbi_pjid)
             # delet directory if can't get taxonomy
             shutil.rmtree(d)
             return
         results = None
-        try:
-            handle = Entrez.esearch(db="nucleotide", term='%s[BioProject] AND biomol_genomic[PROP] AND srcdb_refseq[PROP] NOT ALTERNATE_LOCUS[Keyword] NOT FIX_PATCH[Keyword] NOT NOVEL_PATCH[Keyword] NOT CONTIG[Title] NOT SCAFFOLD[Title]' % ncbi_pjid, usehistory='y')
-            results = Entrez.read(handle)
-        except Exception as inst:
-            sys.stderr.write("!%s!\n" % ncbi_pjid)
-            sys.stderr.write("%s\n" % type(inst))
-        webenv = results["WebEnv"]
-        query_key = results["QueryKey"]
-        count = int(results["Count"])
-        batch_size = 100
         fasta_handle = open("%s/sequence.fa" % d, 'w+')
         seq_count = 0
         for start in range(0,count,batch_size):
@@ -105,9 +114,8 @@ def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2)
                     seq_count = seq_count + 1
                 except Exception as inst:
                     pass
-        nul_f.close()
+            nul_f.close()
         if seq_count:
-  
             fasta_handle.seek(0)
             remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
             fasta_handle.close()
@@ -118,16 +126,22 @@ def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2)
     # proceed if retrying or no sequences found from local database
     if retry or not seq_count:
         try:
+            fasta_handle = open("%s/sequence.fa" % d, 'w+')
             for start in range(0,count,batch_size):
                 handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype=seq_format)
-                remove_ambiguous_bases(handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
+                fasta_handle.write(handle.read())
                 handle.close()
+            fasta_handle.seek(0)
+            remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
+            fasta_handle.close()
+            os.remove("%s/sequence.fa" % d)
         except urllib2.HTTPError:
+            fasta_handle.close()
+            os.remove("%s/sequence.fa" % d)
             #if we have a HTTPError, retry
             fasta_file = "%s/%s.fasta.gz" % (d, ncbi_pjid)
             if os.path.isfile(fasta_file):
                 os.remove(fasta_file)
-            time.sleep(2) # sleep for 2 seconds to let server clear up any issues
             sys.stderr.write("Retrying %s\n" % ncbi_pjid)    
             process_genomes(base, record, seq_format, pat, db_dir, retry+1, max_retry)
             
@@ -139,7 +153,6 @@ def main():
     parser.add_argument('-b', '--db_dir', metavar='DB_DIR', default=os.getcwd(), help='location of refseq genomic database')
     parser.add_argument('-f', '--format', metavar='FORMAT', default='fastq', help='format of input file', choices=['fasta', 'fastq', 'fastq-solexa'])
     parser.add_argument('-t', '--num_threads', metavar='NUM THREADS', default=1, type=int, help='specify number of threads to use')
-    parser.add_argument('-g', '--no_gold', default=False, action='store_true', help='do not use GOLD input file ("gold.csv")')
     parser.add_argument('-r', '--max_retry', metavar='MAX_RETRY', default=2, help='max number of times to retry genome download on http error') 
     args = parser.parse_args()
 
@@ -160,12 +173,11 @@ def main():
         #non-viruses
         nv_pjids = []
         try:
-            nv_handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property])', usehistory="y")
+            nv_handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT suppressed_refseq[Property]', usehistory="y")
             nv_results = Entrez.read(nv_handle)
             nv_webenv = nv_results["WebEnv"]
             nv_query_key = nv_results["QueryKey"]
             count = int(nv_results["Count"])
-            asm_ids = []
             for start in range(0,count,batch_size):
                 fetch_handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=nv_webenv, query_key=nv_query_key)
                 nv_summaries = Entrez.read(fetch_handle)                    
