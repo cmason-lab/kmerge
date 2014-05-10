@@ -46,28 +46,20 @@ def remove_ambiguous_bases(file_handle, output_filename, seq_format, pat):
     out_file.write("\n")
     out_file.close()
 
-def get_taxonomy(d, ncbi_pjid):
-    handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=ncbi_pjid)
-    link_record = Entrez.read(handle)
-    tax_id = link_record[0]['LinkSetDb'][0]['Link'][0]['Id']
-    handle = Entrez.efetch(db="taxonomy", id=tax_id)
-    tax_record = Entrez.read(handle)
-    handle.close()
+def get_taxonomy(d, ncbi_pjid, classifications): # will raise KeyError if key not present
+    tax_record = classifications[ncbi_pjid]
     tax_file = open("%s/taxonomy.txt" % d, 'w')
-    for taxon in tax_record[0]['LineageEx']:
-        if('Rank' in taxon and taxon['Rank'] != 'no rank'):
-            tax_file.write("%s\t%s\n" % (taxon['Rank'], taxon['ScientificName']))
-    tax_file.write("%s\t%s\n" % (tax_record[0]['Rank'], tax_record[0]['ScientificName']))
+    for rank, name in tax_record.iteritems():
+        tax_file.write("%s\t%s\n" % (rank, name))
     tax_file.close()
 
 def fetch_classifications(bioproject_ids, batch_size=20):
     if batch_size < 20:
         batch_size = 20 # minimum size for NCBI records
-    handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=bioproject_ids)
-    link_results = Entrez.read(handle)
-    handle.close()
-    tax_ids = [elem['LinkSetDb'][0]['Link'][0]['Id'] for elem in link_results]
-    bp_ids = [elem['IdList'][0] for elem in link_results]
+    lookup = fetch_link_ids(bioproject_ids, "bioproject", "taxonomy", batch_size)
+    tax_ids = [tax_id for sublist in lookup.values() for tax_id in sublist]
+    bp_ids = [bp_id for bp_id in lookup.keys()]
+    # reverse lookup keys and values
     lookup = dict(zip(tax_ids, bp_ids))
     post_handle = Entrez.epost(db='taxonomy', id=",".join(tax_ids), usehistory="y")
     results = Entrez.read(post_handle)
@@ -78,7 +70,6 @@ def fetch_classifications(bioproject_ids, batch_size=20):
     for start in range(0, len(tax_ids), batch_size):
         fetch_handle = Entrez.efetch(db='taxonomy', retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
         taxonomy_records.extend(Entrez.read(fetch_handle))
-    
     d = dict.fromkeys(bp_ids)    
     for record in taxonomy_records:
         bp_taxonomy = {}
@@ -92,7 +83,54 @@ def fetch_classifications(bioproject_ids, batch_size=20):
             bp_taxonomy[record['Rank']] = record['ScientificName']
         d[lookup[record['TaxId']]] = bp_taxonomy
     return d
-        
+
+def fetch_non_virus_bp_ids(batch_size=20):
+    if batch_size < 20:
+        batch_size = 20
+    pjids = []
+    handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT suppressed_refseq[Property]', usehistory="y")
+    results = Entrez.read(handle)
+    webenv = results["WebEnv"]
+    query_key = results["QueryKey"]
+    count = int(results["Count"])
+    for start in range(0,count,batch_size):
+        sum_handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
+        summaries = Entrez.read(sum_handle,validate=False)
+        pjids.extend([ summary['RS_BioProjects'][0]['BioprojectId'] for summary in summaries['DocumentSummarySet']['DocumentSummary']])
+    return pjids
+
+def fetch_virus_bp_ids(batch_size=20):
+    if batch_size < 20:
+        batch_size = 20
+    handle = Entrez.esearch(db="genome", term='(txid29258[Organism:exp] OR txid35237[Organism:exp]) AND complete[Status] AND RefSeq[All Fields] AND genome_pubmed[FILT]', usehistory="y")
+    results = Entrez.read(handle)
+    webenv = results["WebEnv"]
+    query_key = results["QueryKey"]
+    count = int(results["Count"])
+    summaries = []
+    for start in range(0,count,batch_size):
+        sum_handle = Entrez.esummary(db="genome", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
+        summaries.extend(Entrez.read(sum_handle))
+    
+    pjids = [ summary['ProjectID'] for summary in summaries]
+    return pjids
+
+def fetch_link_ids(lookup_ids, from_db, to_db, split_size=20):
+    if split_size < 20:
+        split_size = 20
+    results = []
+    for split_ids in [ lookup_ids[i:i+split_size] for i in range(0, len(lookup_ids), split_size) ]:
+        handle = Entrez.elink(dbfrom=from_db, db=to_db, id=split_ids)
+        results.extend(Entrez.read(handle))
+        handle.close()
+
+    id_map = {}
+    for elem in results:
+        id_map[elem['IdList'][0]] = [ rec['Id'] for rec in elem['LinkSetDb'][0]['Link']]
+
+    return id_map
+                                                                                                    
+
 def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2):
     ncbi_pjid = record['IdList'][0]
     d = base + ncbi_pjid    
@@ -203,49 +241,35 @@ def main():
 
         pool = threadpool.ThreadPool(args.num_threads)
         
-        
-        #non-viruses
         nv_pjids = []
+        #non-viruses
         try:
-            nv_handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT suppressed_refseq[Property]', usehistory="y")
-            nv_results = Entrez.read(nv_handle)
-            nv_webenv = nv_results["WebEnv"]
-            nv_query_key = nv_results["QueryKey"]
-            count = int(nv_results["Count"])
-            for start in range(0,count,batch_size):
-                fetch_handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=nv_webenv, query_key=nv_query_key)
-                nv_summaries = Entrez.read(fetch_handle)                    
-                nv_pjids.extend([ summary['RS_BioProjects'][0]['BioprojectId'] for summary in nv_summaries['DocumentSummarySet']['DocumentSummary']])
+            nv_pjids = fetch_non_virus_bp_ids(batch_size)
         except Exception as inst:
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
             sys.exit()
 
-            
+        v_pjids = []
         #viruses
-        v_handle = Entrez.esearch(db="genome", term='(txid29258[Organism:exp] OR txid35237[Organism:exp]) AND complete[Status] AND "RefSeq" AND genome_pubmed[FILT]', usehistory="y")
-        v_results = Entrez.read(v_handle)
-        v_webenv = v_results["WebEnv"]
-        v_query_key = v_results["QueryKey"]
-        count = int(v_results["Count"])
-        v_summaries = []
-        for start in range(0,count,batch_size):
-            fetch_handle = Entrez.esummary(db="genome", retstart=start, retmax=batch_size, webenv=v_webenv, query_key=v_query_key)
-            v_summaries.extend(Entrez.read(fetch_handle))
-
-        v_pjids = [ summary['ProjectID'] for summary in v_summaries]
+        try:
+            v_pjids = fetch_virus_bp_ids(batch_size)    
+        except Exception as inst:
+            sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
+            sys.exit()
 
         
         pjids = list(set(nv_pjids + v_pjids))
 
+        classifications = fetch_classifications(pjids)
+        # get the pjids that have classifications and ignore rest
+        pjids = classifications.keys()
+        
         records = []
-        for split_ids in [ pjids[i:i+split_size] for i in range(0, len(pjids), split_size) ]:
-            try:
-                handle = Entrez.elink(dbfrom="bioproject", db="nuccore", id=split_ids)
-                records.extend(Entrez.read(handle))
-                handle.close()
-            except Exception as inst:
-                sys.stderr.write("Error linking to sequences in nuccore\n")
-                sys.exit()
+        try:
+            records = process_seqs.fetch_link_ids(pjids, "bioproject", "nuccore", split_size)        
+        except Exception as inst:
+            sys.stderr.write("Error linking to sequences in nuccore\n")
+            sys.exit()
 
         for record in records:
             request = threadpool.WorkRequest(process_genomes, args=[base, record, seq_format, pat, args.db_dir, 0, args.max_retry])
