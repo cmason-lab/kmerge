@@ -60,7 +60,9 @@ def get_taxonomy(d, ncbi_pjid):
     tax_file.write("%s\t%s\n" % (tax_record[0]['Rank'], tax_record[0]['ScientificName']))
     tax_file.close()
 
-def fetch_classifications(bioproject_ids, batch_size):
+def fetch_classifications(bioproject_ids, batch_size=20):
+    if batch_size < 20:
+        batch_size = 20 # minimum size for NCBI records
     handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=bioproject_ids)
     link_results = Entrez.read(handle)
     handle.close()
@@ -73,8 +75,9 @@ def fetch_classifications(bioproject_ids, batch_size):
     webenv = results["WebEnv"]
     query_key = results["QueryKey"]
     taxonomy_records = []
-    fetch_handle = Entrez.efetch(db='taxonomy', webenv=webenv, query_key=query_key)
-    taxonomy_records.extend(Entrez.read(fetch_handle))
+    for start in range(0, len(tax_ids), batch_size):
+        fetch_handle = Entrez.efetch(db='taxonomy', retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
+        taxonomy_records.extend(Entrez.read(fetch_handle))
     
     d = dict.fromkeys(bp_ids)    
     for record in taxonomy_records:

@@ -60,7 +60,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         bioproject_ids = ['168','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
                           '59073']
 
-        d = process_seqs.fetch_classifications(bioproject_ids, 20)
+        d = process_seqs.fetch_classifications(bioproject_ids)
 
         for bp, taxonomy in d.iteritems():
             self.assertTrue('species' in taxonomy)
