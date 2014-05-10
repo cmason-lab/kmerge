@@ -57,8 +57,39 @@ def get_taxonomy(d, ncbi_pjid):
     for taxon in tax_record[0]['LineageEx']:
         if('Rank' in taxon and taxon['Rank'] != 'no rank'):
             tax_file.write("%s\t%s\n" % (taxon['Rank'], taxon['ScientificName']))
-                                                                                                                                                                                                                                                                
-            
+    tax_file.write("%s\t%s\n" % (tax_record[0]['Rank'], tax_record[0]['ScientificName']))
+    tax_file.close()
+
+def fetch_classifications(bioproject_ids, batch_size):
+    handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id=bioproject_ids)
+    link_results = Entrez.read(handle)
+    handle.close()
+    tax_ids = [elem['LinkSetDb'][0]['Link'][0]['Id'] for elem in link_results]
+    bp_ids = [elem['IdList'][0] for elem in link_results]
+    lookup = dict(zip(tax_ids, bp_ids))
+    post_handle = Entrez.epost(db='taxonomy', id=",".join(tax_ids), usehistory="y")
+    results = Entrez.read(post_handle)
+    post_handle.close()
+    webenv = results["WebEnv"]
+    query_key = results["QueryKey"]
+    taxonomy_records = []
+    fetch_handle = Entrez.efetch(db='taxonomy', webenv=webenv, query_key=query_key)
+    taxonomy_records.extend(Entrez.read(fetch_handle))
+    
+    d = dict.fromkeys(bp_ids)    
+    for record in taxonomy_records:
+        bp_taxonomy = {}
+        species_found = False
+        for taxon in record['LineageEx']:
+            if('Rank' in taxon and (taxon['Rank'] != 'no rank')):
+                if taxon['Rank'] == 'species':
+                    species_found = True
+                bp_taxonomy[taxon['Rank']] = taxon['ScientificName']
+        if not species_found:
+            bp_taxonomy[record['Rank']] = record['ScientificName']
+        d[lookup[record['TaxId']]] = bp_taxonomy
+    return d
+        
 def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2):
     ncbi_pjid = record['IdList'][0]
     d = base + ncbi_pjid    

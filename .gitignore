@@ -10,3 +10,4 @@ tests/29309
 *.h5
 tests/kmerge_unittest
 *.bak
+*.pyc

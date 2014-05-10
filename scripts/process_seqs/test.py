@@ -12,16 +12,29 @@ class TestDownloadFastaFunctions(unittest.TestCase):
     
     def setUp(self):
         Entrez.email = 'dar326@cornell.edu'
-        
+
+    @unittest.skip("skipping")
+    def test_fetch_non_virus_bioproject_ids(self):
+        pass
+
+    @unittest.skip("skipping")
+    def test_fetch_virus_bioproject_ids(self):
+        pass
+
+    @unittest.skip("skipping")
+    def test_fetch_taxonomy_details(self):
+        pass
+
+    @unittest.skip("skipping")
     def test_get_taxonomy(self):
         process_seqs.get_taxonomy(os.getcwd(), '169')
         self.assertTrue(os.path.isfile('taxonomy.txt'))
         d = {}
         with open("taxonomy.txt") as f:
             for line in f:
-                (key, val) = line.split()
+                (key, val) = line.strip().split("\t")
                 d[key] = val
-        self.assertEqual(len(d), 12)
+        self.assertEqual(len(d), 13)
         self.assertEqual(d['superkingdom'], 'Eukaryota')
         self.assertEqual(d['kingdom'], 'Metazoa')
         self.assertEqual(d['phylum'], 'Chordata')
@@ -34,52 +47,23 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertEqual(d['subfamily'], 'Murinae')
         self.assertEqual(d['genus'], 'Mus')
         self.assertEqual(d['subgenus'], 'Mus')
+        self.assertEqual(d['species'], 'Mus musculus')
         os.remove('taxonomy.txt')
         self.assertFalse(os.path.isfile('taxonomy.txt'))
 
-    def test_invalid_bioproject_id_raises_error_in_get_taxonomy(self):
-        handle = Entrez.elink(dbfrom="bioproject", db="taxonomy", id='48361')
-        link_record = Entrez.read(handle)
-        tax_id = link_record[0]['LinkSetDb'][0]['Link'][0]['Id']
-        handle = Entrez.efetch(db="taxonomy", id=tax_id)
-        tax_record = Entrez.read(handle)
-        handle.close()
-        for taxon in tax_record[0]['LineageEx']:
-            if('Rank' in taxon and taxon['Rank'] != 'no rank'):
-                print "%s\t%s" % (taxon['Rank'], taxon['ScientificName'])
-                            
-        
-        self.assertRaises(IndexError, process_seqs.get_taxonomy(os.getcwd(), '48361'))
+    @unittest.skip("skipping")
+    def test_invalid_bioproject_id_raises_error_in_get_taxonomy(self):        
+        self.assertRaises(IndexError, process_seqs.get_taxonomy, os.getcwd(), '209158')
 
+    #@unittest.skip("skipping")
     def test_genome_to_taxonomy(self):
-        handle = Entrez.esearch(db="genome", term='(txid29258[Organism:exp] OR txid35237[Organism:exp]) AND complete[Status] AND "RefSeq" AND genome_pubmed[FILT]', usehistory="y")
-        results = Entrez.read(handle)
-        webenv = results["WebEnv"]
-        query_key = results["QueryKey"]
-        count = int(results["Count"])
-        fetch_handle = Entrez.esummary(db="genome", retstart=0, retmax=200, webenv=webenv, query_key=query_key)
-        genome_ids = Entrez.read(fetch_handle)
-        fetch_handle.close()
-        fetch_handle = Entrez.elink(dbfrom="genome", db="taxonomy", webenv=webenv, query_key=query_key, usehistory="y")
-        link_results = Entrez.read(fetch_handle)
-        fetch_handle.close()
-        self.assertEqual(len(link_results[0]['IdList']), count)
-        tax_ids = link_results[0]['LinkSetDb'][0]['Link']
-        self.assertEqual(len(tax_ids), count)
-        handle = Entrez.epost(db='taxonomy', id=",".join(tax_ids))
-        results = Entrez.read(handle)
-        handle.close()
-        webenv = results["WebEnv"]
-        query_key = results["QueryKey"]
-        taxonomy_count = int(results["Count"])
-        self.assertEqual(taxonomy_count, count)
-        fetch_handle = Entrez.efetch(db='taxonomy', restart=0, retmax=200, webenv=webenv, query_key=query_key)
-        taxonomy_records = Entrez.read(fetch_handle)
-        d = {}
-        for taxon in taxonomy_records:
-            if('Rank' in taxon and (taxon['Rank'] != 'no rank')):
-                d[taxon['LineageEx']['Rank']] = taxon['LineageEx']['ScientificName']
-        
+        bioproject_ids = ['168','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
+                          '59073']
+
+        d = process_seqs.fetch_classifications(bioproject_ids, 20)
+
+        for bp, taxonomy in d.iteritems():
+            self.assertTrue('species' in taxonomy)
         
 if __name__ == '__main__':
     unittest.main()

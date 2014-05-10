@@ -1,7 +1,0 @@
-superkingdom	Bacteria
-phylum	Firmicutes
-class	Bacilli
-order	Bacillales
-family	Alicyclobacillaceae
-genus	Kyrpidia
-species	Kyrpidia tusciae
