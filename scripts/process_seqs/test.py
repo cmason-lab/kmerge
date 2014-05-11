@@ -95,7 +95,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         seq_format = "fasta"
         db_dir = "/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/BLAST/"
 
-        pool = threadpool.ThreadPool(3)
+        pool = threadpool.ThreadPool(1)
 
         nv_pjids = []
         #non-viruses

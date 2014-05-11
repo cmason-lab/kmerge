@@ -127,7 +127,12 @@ def fetch_link_ids(lookup_ids, from_db, to_db, split_size=20):
 
     id_map = {}
     for elem in results:
-        id_map[elem['IdList'][0]] = [ rec['Id'] for rec in elem['LinkSetDb'][0]['Link']]
+        from_id = elem['IdList'][0]
+        if len(elem['LinkSetDb']) == 0: # no taxonomy record
+            continue
+        to_list = elem['LinkSetDb'][0]['Link']
+        to_ids = [ rec['Id'] for rec in to_list]
+        id_map[from_id] = to_ids
 
     return id_map
 
