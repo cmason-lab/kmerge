@@ -167,9 +167,9 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
             results = handle.read()
             handle.close()
         seq_count = 0
-        if check_refseq:    
-            for acc in results.split("\n"):
-                if get_sequence_from_refseq(file_handle, accession, db_dir):
+        if check_refseq:
+            for acc in [line for line in results.split("\n") if line != '']:
+                if get_sequence_from_refseq(fasta_handle, acc, db_dir):
                     seq_count = seq_count + 1
         check_refseq = False
         # proceed if no sequences found from local database
@@ -244,7 +244,7 @@ def main():
         pjids = classifications.keys()
 
         for ncbi_pjid in pjids:
-            request = threadpool.WorkRequest(process_genomes, args=[base, ncbi_pjid, classifications, seq_format, args.db_dir, 0, args.max_retry])
+            request = threadpool.WorkRequest(process_genomes, args=[base, ncbi_pjid, classifications, seq_format, args.db_dir, True, 0, args.max_retry])
             pool.putRequest(request) 
             
         pool.wait()

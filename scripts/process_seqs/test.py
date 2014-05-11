@@ -89,13 +89,13 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         os.remove("%s/%s.fasta.gz" % (d, ncbi_pjid))
 
     #@unittest.skip("skipping")
-    def test_full_mode(self):
+    def test_full_pipeline(self):
         batch_size = 200
         base = os.getcwd() + "/"
         seq_format = "fasta"
         db_dir = "/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/BLAST/"
 
-        pool = threadpool.ThreadPool(6)
+        pool = threadpool.ThreadPool(3)
 
         nv_pjids = []
         #non-viruses
@@ -119,7 +119,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         pjids = classifications.keys()
     
         for ncbi_pjid in pjids:
-            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_pjid, classifications, seq_format, db_dir, 0, 2])
+            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_pjid, classifications, seq_format, db_dir, True, 0, 2])
             pool.putRequest(request)
 
         pool.wait()
@@ -152,10 +152,6 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertEqual(d['species'], 'Mus musculus')
         os.remove('taxonomy.txt')
         self.assertFalse(os.path.isfile('taxonomy.txt'))
-
-    #@unittest.skip("skipping")
-    def test_invalid_bioproject_id_raises_error_in_get_taxonomy(self):        
-        self.assertRaises(IndexError, process_seqs.get_taxonomy, os.getcwd(), '209158')
 
     #@unittest.skip("skipping")
     def test_genome_to_taxonomy(self):
