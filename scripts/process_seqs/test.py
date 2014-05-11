@@ -7,13 +7,14 @@ import urllib2
 import gzip
 from subprocess32 import check_output, CalledProcessError
 import shutil
+import threadpool
 
 class TestDownloadFastaFunctions(unittest.TestCase):
     
     def setUp(self):
         Entrez.email = 'dar326@cornell.edu'
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_fetch_non_virus_bioproject_ids(self):
         ids = process_seqs.fetch_non_virus_bp_ids()
         self.assertGreaterEqual(len(ids), 2292) # number of results as of May 10, 2014                                                 
@@ -23,7 +24,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertIn('164', ids) #drosophila
         self.assertIn('158', ids) #c. elegans
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_fetch_virus_bioproject_ids(self):
         ids = process_seqs.fetch_virus_bp_ids()
 
@@ -32,7 +33,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertIn('15423', ids)
         self.assertIn('14331', ids)
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_fetch_nucleotide_sequence_ids(self):
         pjids = ['169','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
                                   '59073', '86861', '215233', '88071', '86645', '89395', '213395', '225', '128']
@@ -60,8 +61,70 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertIn('330443482', project_sequence_ids['128'])
         self.assertIn('330443391', project_sequence_ids['128'])
         self.assertIn('6226515', project_sequence_ids['128'])
+
+    #@unittest.skip("skipping")
+    def test_get_sequence_from_refseq(self):
+        d = os.getcwd()
+        fasta_handle = open("%s/sequence.fa" % d, 'w+')
+        acc = 'NC_000913.3'
+        db_dir = '/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/BLAST/'
+        self.assertTrue(process_seqs.get_sequence_from_refseq(fasta_handle, acc, db_dir))
+        fasta_handle.close()
+        sequence = open("%s/sequence.fa" % d, 'r').read()
+        os.remove("%s/sequence.fa" % d)
+        ref = gzip.open("NC_000913.3.fasta.gz", 'r').read()
+        self.assertEqual(sequence, ref)
+
+    #@unittest.skip("skipping")
+    def test_remove_ambiguous_bases(self):
+        d = os.getcwd()
+        ncbi_pjid = '168'
+        fasta_handle = open("/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/FASTA/hg19/chr/chr1.fa", 'r')
+        process_seqs.remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), 'fasta')
+        fasta_handle.close()
         
-    @unittest.skip("skipping")
+        sequence = gzip.open("%s/%s.fasta.gz" % (d, ncbi_pjid), 'rb').read()
+        ref = gzip.open("chr1.split.fasta.gz", 'rb').read()
+        self.assertEqual(sequence, ref)
+        os.remove("%s/%s.fasta.gz" % (d, ncbi_pjid))
+
+    #@unittest.skip("skipping")
+    def test_full_mode(self):
+        batch_size = 200
+        base = os.getcwd() + "/"
+        seq_format = "fasta"
+        db_dir = "/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/BLAST/"
+
+        pool = threadpool.ThreadPool(6)
+
+        nv_pjids = []
+        #non-viruses
+        try:
+            nv_pjids = process_seqs.fetch_non_virus_bp_ids(batch_size)
+        except Exception as inst:
+            sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
+
+        v_pjids = []
+        #viruses
+        try:
+            v_pjids = process_seqs.fetch_virus_bp_ids(batch_size)
+        except Exception as inst:
+            sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
+
+
+        pjids = list(set(nv_pjids[:3] + v_pjids[:3]))
+    
+        classifications = process_seqs.fetch_classifications(pjids)
+        # get the pjids that have classifications and ignore rest
+        pjids = classifications.keys()
+    
+        for ncbi_pjid in pjids:
+            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_pjid, classifications, seq_format, db_dir, 0, 2])
+            pool.putRequest(request)
+
+        pool.wait()
+
+    #@unittest.skip("skipping")
     def test_get_taxonomy(self):
         bioproject_ids = ['169','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
                                                     '59073', '86861', '215233', '88071', '86645', '89395', '213395']
@@ -90,7 +153,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         os.remove('taxonomy.txt')
         self.assertFalse(os.path.isfile('taxonomy.txt'))
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_invalid_bioproject_id_raises_error_in_get_taxonomy(self):        
         self.assertRaises(IndexError, process_seqs.get_taxonomy, os.getcwd(), '209158')
 

@@ -11,3 +11,4 @@ tests/29309
 tests/kmerge_unittest
 *.bak
 *.pyc
+*fasta*

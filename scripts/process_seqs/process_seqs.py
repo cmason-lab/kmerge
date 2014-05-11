@@ -14,11 +14,12 @@ class FileType(argparse.FileType):
         return super(FileType, self).__call__(string)
 
     
-def remove_ambiguous_bases(file_handle, output_filename, seq_format, pat):
+def remove_ambiguous_bases(file_handle, output_filename, seq_format):
     id = ""
     first = True
     sequences = []
     seq_num = 0
+    pat = re.compile(r'N+', re.IGNORECASE)
        
     out_file = gzip.open(output_filename, 'wb')
 
@@ -70,7 +71,7 @@ def fetch_classifications(bioproject_ids, batch_size=20):
     for start in range(0, len(tax_ids), batch_size):
         fetch_handle = Entrez.efetch(db='taxonomy', retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
         taxonomy_records.extend(Entrez.read(fetch_handle))
-    d = dict.fromkeys(bp_ids)    
+    d = dict.fromkeys(bp_ids)
     for record in taxonomy_records:
         bp_taxonomy = {}
         species_found = False
@@ -129,10 +130,17 @@ def fetch_link_ids(lookup_ids, from_db, to_db, split_size=20):
         id_map[elem['IdList'][0]] = [ rec['Id'] for rec in elem['LinkSetDb'][0]['Link']]
 
     return id_map
-                                                                                                    
 
-def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2):
-    ncbi_pjid = record['IdList'][0]
+def get_sequence_from_refseq(file_handle, accession, db_dir):
+    try:
+        output = check_output(["blastdbcmd", "-db", "%s/refseq_genomic" % db_dir, "-dbtype", "nucl", "-entry", "%s" % accession, ],
+                              universal_newlines=True, stderr=open(os.devnull, 'w'))
+        file_handle.write(output)
+        return True
+    except Exception as inst:
+        return False
+
+def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_refseq=True, retry=0, max_retry=2):
     d = base + ncbi_pjid    
     if retry > max_retry:
         sys.stderr.write("!%s!: Could not obtain sequences\n" % ncbi_pjid)
@@ -143,79 +151,51 @@ def process_genomes(base, record, seq_format, pat, db_dir, retry=0, max_retry=2)
     except OSError:
         if not os.path.isdir(d):
             raise
-    seq_count = None
-    results = None
+
     try:
         handle = Entrez.esearch(db="nucleotide", term='%s[BioProject] AND biomol_genomic[PROP] AND srcdb_refseq[PROP] NOT ALTERNATE_LOCUS[Keyword] NOT FIX_PATCH[Keyword] NOT NOVEL_PATCH[Keyword] NOT CONTIG[Title] NOT SCAFFOLD[Title]' % ncbi_pjid, usehistory='y')
         results = Entrez.read(handle)
-    except Exception as inst:
-        sys.stderr.write("!%s!\n" % ncbi_pjid)
-        sys.stderr.write("%s\n" % type(inst))
-        return
-    webenv = results["WebEnv"]
-    query_key = results["QueryKey"]
-    count = int(results["Count"])
-    batch_size = 100                                                                                                    
-    if not retry:
-        # write out classifications to taxonomy file
-        try:
-            get_taxonomy(d, ncbi_pjid)
-        except Exception as inst:
-            sys.stderr.write("!%s!: Error getting taxonomy information\n" % ncbi_pjid)
-            # delet directory if can't get taxonomy
-            shutil.rmtree(d)
-            return
+        webenv = results["WebEnv"]
+        query_key = results["QueryKey"]
+        count = int(results["Count"])
+        batch_size = 100
+        get_taxonomy(d, ncbi_pjid, classifications)                                                                                                    
         results = None
         fasta_handle = open("%s/sequence.fa" % d, 'w+')
-        seq_count = 0
         for start in range(0,count,batch_size):
-            results = None
-            try:
-                handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype="acc")
-                results = handle.read()
-                handle.close()
-            except Exception as inst:
-                sys.stderr.write("!%s!\n" % ncbi_pjid)
-                sys.stderr.write("%s\n" % type(inst))
-            nul_f = open(os.devnull, 'w')
+            handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype="acc")
+            results = handle.read()
+            handle.close()
+        seq_count = 0
+        if check_refseq:    
             for acc in results.split("\n"):
-                try:
-                    output = check_output(["blastdbcmd", "-db", "%s/refseq_genomic" % db_dir, "-dbtype", "nucl", "-entry", "%s" % acc, ],
-                                universal_newlines=True, stderr=nul_f)
-                    fasta_handle.write(output)
+                if get_sequence_from_refseq(file_handle, accession, db_dir):
                     seq_count = seq_count + 1
-                except Exception as inst:
-                    pass
-            nul_f.close()
-        if seq_count:
-            fasta_handle.seek(0)
-            remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
-            fasta_handle.close()
-            os.remove("%s/sequence.fa" % d)
-        else:
-            fasta_handle.close()
-            os.remove("%s/sequence.fa" % d)
-    # proceed if retrying or no sequences found from local database
-    if retry or not seq_count:
-        try:
-            fasta_handle = open("%s/sequence.fa" % d, 'w+')
+        check_refseq = False
+        # proceed if no sequences found from local database
+        if not seq_count:
             for start in range(0,count,batch_size):
                 handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype=seq_format)
                 fasta_handle.write(handle.read())
                 handle.close()
-            fasta_handle.seek(0)
-            remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format, pat)
+        fasta_handle.seek(0)
+        remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format)
+        fasta_handle.close()
+        os.remove("%s/sequence.fa" % d)
+    except urllib2.HTTPError:
+        #if we have a HTTPError, retry
+        raw_fasta_file = "%s/sequence.fa" % d
+        if os.path.isfile(raw_fasta_file):
             fasta_handle.close()
             os.remove("%s/sequence.fa" % d)
-        except urllib2.HTTPError:
-            fasta_handle.close()
-            os.remove("%s/sequence.fa" % d)
-            #if we have a HTTPError, retry
-            fasta_file = "%s/%s.fasta.gz" % (d, ncbi_pjid)
-            if os.path.isfile(fasta_file):
-                os.remove(fasta_file)
-            sys.stderr.write("Retrying %s\n" % ncbi_pjid)    
-            process_genomes(base, record, seq_format, pat, db_dir, retry+1, max_retry)
+        fasta_file = "%s/%s.fasta.gz" % (d, ncbi_pjid)
+        if os.path.isfile(fasta_file):
+            os.remove(fasta_file)
+        sys.stderr.write("Retrying %s\n" % ncbi_pjid)    
+        process_genomes(base, record, seq_format, pat, db_dir, check_refseq, retry+1, max_retry)
+    except Exception as inst:
+        sys.stderr.write("!%s!:%s\n" % (ncbi_pjid, type(inst)))
+        
             
 def main():
     parser = argparse.ArgumentParser(description='Process sequences for KMerge')
@@ -229,7 +209,6 @@ def main():
     args = parser.parse_args()
 
     mode = args.mode
-    pat = re.compile(r'N+', re.IGNORECASE)
     Entrez.email = 'dar326@cornell.edu'
     split_size = 100
     
@@ -263,16 +242,9 @@ def main():
         classifications = fetch_classifications(pjids)
         # get the pjids that have classifications and ignore rest
         pjids = classifications.keys()
-        
-        records = []
-        try:
-            records = process_seqs.fetch_link_ids(pjids, "bioproject", "nuccore", split_size)        
-        except Exception as inst:
-            sys.stderr.write("Error linking to sequences in nuccore\n")
-            sys.exit()
 
-        for record in records:
-            request = threadpool.WorkRequest(process_genomes, args=[base, record, seq_format, pat, args.db_dir, 0, args.max_retry])
+        for ncbi_pjid in pjids:
+            request = threadpool.WorkRequest(process_genomes, args=[base, ncbi_pjid, classifications, seq_format, args.db_dir, 0, args.max_retry])
             pool.putRequest(request) 
             
         pool.wait()
@@ -282,7 +254,7 @@ def main():
         seq_format = args.format
         base = args.dir
 
-        remove_ambiguous_bases(handle, base + "/sample.fasta.gz", seq_format, pat)
+        remove_ambiguous_bases(handle, base + "/sample.fasta.gz", seq_format)
 
 
             
