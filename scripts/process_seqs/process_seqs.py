@@ -187,8 +187,8 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
         remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), seq_format)
         fasta_handle.close()
         os.remove("%s/sequence.fa" % d)
-    except urllib2.HTTPError:
-        #if we have a HTTPError, retry
+    except (urllib2.HTTPError, AttributeError):
+        #if we have a HTTPError or AttributeError, retry
         raw_fasta_file = "%s/sequence.fa" % d
         if os.path.isfile(raw_fasta_file):
             fasta_handle.close()
@@ -197,7 +197,7 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
         if os.path.isfile(fasta_file):
             os.remove(fasta_file)
         sys.stderr.write("Retrying %s\n" % ncbi_pjid)    
-        process_genomes(base, record, seq_format, pat, db_dir, check_refseq, retry+1, max_retry)
+        process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_refseq, retry+1, max_retry)
     except Exception as inst:
         sys.stderr.write("!%s!:%s\n" % (ncbi_pjid, type(inst)))
         
@@ -246,7 +246,7 @@ def main():
 
         classifications = fetch_classifications(pjids)
         # get the pjids that have classifications and ignore rest
-        pjids = classifications.keys()
+        pjids = [id for id, c in classifications.iteritems() if c != None]
 
         for ncbi_pjid in pjids:
             request = threadpool.WorkRequest(process_genomes, args=[base, ncbi_pjid, classifications, seq_format, args.db_dir, True, 0, args.max_retry])

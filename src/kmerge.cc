@@ -157,9 +157,11 @@ bool KMerge::add_taxonomy(const std::string& group) {
   std::vector<uint64_t> dims;
   std::string line;
 
+
   path_root << group << "/taxonomy";
   in_file_ss << this->dir << path_root.str() << ".txt";
   ifstream in_file(in_file_ss.str().c_str());
+
 
   dims.push_back(0);
 
@@ -175,8 +177,11 @@ bool KMerge::add_taxonomy(const std::string& group) {
     if (!(this->hdf5_file->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
       error << "Unable to add classification:" << path.str();
       throw error.str();
+      return false;
     }
   }
+
+  return true;
 }
 
 bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<uint>& counts) {

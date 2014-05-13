@@ -56,7 +56,7 @@ TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
 
   // compare to jellyfish results
   // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz
-  // ~/bin/jellyfish count -m 5 -o output -s 10000 -C <(zcat genome.test.contig.fa.gz)
+  // ~/bin/jellyfish count -m 5 -o output -s 10000 <(zcat genome.test.contig.fa.gz)
   // ~/bin/jellyfish dump -c output > genome.test.kmers.txt
 
   std::string seq;
@@ -237,20 +237,20 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
   params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
 
-  params1.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/15667/15667.fasta.gz";
-  params1.group_name = "/15667";
-  params1.hash_dataset_name =  "/15667/kmer_hash";
-  params1.counts_dataset_name = "/15667/count";
+  params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
+  params1.group_name = "/208831";
+  params1.hash_dataset_name =  "/208831/kmer_hash";
+  params1.counts_dataset_name = "/208831/count";
 
-  params2.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/165193/165193.fasta.gz";
-  params2.group_name = "/165193";
-  params2.hash_dataset_name = "/165193/kmer_hash";
-  params2.counts_dataset_name = "/165193/count";
+  params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
+  params2.group_name = "/209328";
+  params2.hash_dataset_name = "/209328/kmer_hash";
+  params2.counts_dataset_name = "/209328/count";
 
-  params3.seq_filename = "/home/darryl/Development/kmerge/tests/sandbox/29363/29363.fasta.gz";
-  params3.group_name = "/29363";
-  params3.hash_dataset_name = "/29363/kmer_hash";
-  params3.counts_dataset_name = "/29363/count";
+  params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
+  params3.group_name = "/54095";
+  params3.hash_dataset_name = "/54095/kmer_hash";
+  params3.counts_dataset_name = "/54095/count";
 
   uint thread_count = 3;
 
@@ -297,8 +297,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       exit(EXIT_FAILURE);
     }
 
-    kmer1_count = 10816 /*AAAAA*/ + 11439 /*TTTTT*/;
-    kmer2_count = 7617 /*GCGAT*/ + 7672 /*ATCGC*/;
+    kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
+    kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
@@ -318,7 +318,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete [] counts_arr;
     delete [] hashes_arr;
 
-    in_file.open("./15667/taxonomy.txt");
+    in_file.open("./208831/taxonomy.txt");
 
     while (std::getline(in_file, line)) {
       std::istringstream tokenizer(line);
@@ -330,13 +330,13 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
 	getline(tokenizer, token, '\t');
 	if (i == 0) { // this is taxon                                                                                         
-	  path << "/15667/taxonomy/" << token;
+	  path << "/208831/taxonomy/" << token;
 	} else { // this is classification                                                                                     
 	  classification = token;
 	}
 	i++;
       }
-      if(!test->getAllVariables(path.str(), vars)) {
+      if(!sample->getAllVariables(vars, path.str())) {
 	throw "Unable to get variables";
       }
       path << "/";
@@ -360,8 +360,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       cerr << "Cannot access sample counts" << endl;
     }
 
-    kmer1_count = 6910 /*AAAAA*/ + 6830 /*TTTTT*/;
-    kmer2_count = 1881 /*GCGAT*/ + 1926 /*ATCGC*/;
+    kmer1_count = 2147 /*AAAAA*/ + 1919 /*TTTTT*/;
+    kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
@@ -380,7 +380,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete [] counts_arr;
     delete [] hashes_arr;
 
-    in_file.open("./165193/taxonomy.txt");
+    in_file.open("./209328/taxonomy.txt");
 
     while (std::getline(in_file, line)) {
       std::istringstream tokenizer(line);
@@ -392,13 +392,13 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
         getline(tokenizer, token, '\t');
         if (i == 0) { // this is taxon                                                                                         
-          path << "/165193/taxonomy/" << token;
+          path << "/209328/taxonomy/" << token;
         } else { // this is classification                                                                                     
           classification = token;
         }
         i++;
       }
-      if(!test->getAllVariables(path.str(), vars)) {
+      if(!sample->getAllVariables(vars, path.str())) {
         throw "Unable to get variables";
       }
       path << "/";
@@ -421,10 +421,10 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     if(!(sample->getData("count", counts_arr, &params3.group_name[0]))) {
       cerr << "Cannot access sample counts" << endl;
     }
-
-    kmer1_count = 11579 /*AAAAA*/ + 12074 /*TTTTT*/;
-    kmer2_count = 234 /*GCGAT*/ + 234 /*ATCGC*/;
-
+    
+    kmer1_count = 9896 /*AAAAA*/ + 9505 /*TTTTT*/;
+    kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
+  
     for (pos = 0; pos < dims[0]; pos++) {
       if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
 	kmer1_pos = pos;
@@ -442,7 +442,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete [] counts_arr;
     delete [] hashes_arr;
 
-    in_file.open("./29363/taxonomy.txt");
+    in_file.open("./54095/taxonomy.txt");
 
     while (std::getline(in_file, line)) {
       std::istringstream tokenizer(line);
@@ -454,13 +454,13 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
         getline(tokenizer, token, '\t');
         if (i == 0) { // this is taxon                                                                                         
-          path << "/29363/taxonomy/" << token;
+          path << "/54095/taxonomy/" << token;
         } else { // this is classification                                                                                     
           classification = token;
 	}
         i++;
       }
-      if(!test->getAllVariables(path.str(), vars)) {
+      if(!sample->getAllVariables(vars, path.str())) {
 	throw "Unable to get variables";
       }
       path << "/";
@@ -543,8 +543,8 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 }
 
 TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
-  std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), group("/13838"); 
-  std::string path_root("/13838/taxonomy"), line;
+  std::string hdf5_filename("/home/darryl/Development/kmerge/tests/taxonomy.h5"), group("/54095"); 
+  std::string path_root("/54095/taxonomy"), line;
   
 
   KMerge *kmerge = new KMerge(hdf5_filename, "lookup3", ".");
@@ -555,7 +555,7 @@ TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
 
   HDF5 *test = new HDF5(hdf5_filename, false);
 
-  ifstream in_file("./13838/taxonomy.txt");
+  ifstream in_file("./54095/taxonomy.txt");
 
   while (std::getline(in_file, line)) {
     std::istringstream tokenizer(line);
