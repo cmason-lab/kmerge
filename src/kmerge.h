@@ -44,9 +44,11 @@ class KMerge {
   bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*);
   bool add_taxonomy(const std::string&);
+  static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
+  bool add_hash(std::map<uint, uint>&, uint);
   bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {

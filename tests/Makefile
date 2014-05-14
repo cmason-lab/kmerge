@@ -28,7 +28,7 @@ CXX=/home/darryl/hdf5/bin/h5c++
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -lsz -lGkArrays -L $(HOME_DIR)/lib64 -larmadillo
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -lsz -L $(HOME_DIR)/lib64 -larmadillo
 
 # House-keeping build targets.
 

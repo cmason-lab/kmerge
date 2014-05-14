@@ -65,28 +65,13 @@ class TestDownloadFastaFunctions(unittest.TestCase):
     #@unittest.skip("skipping")
     def test_get_sequence_from_refseq(self):
         d = os.getcwd()
-        fasta_handle = open("%s/sequence.fa" % d, 'w+')
+        fasta_handle = gzip.open("%s/sequence.fa.gz" % d, 'w+b')
         acc = 'NC_000913.3'
         db_dir = '/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/BLAST/'
         self.assertTrue(process_seqs.get_sequence_from_refseq(fasta_handle, acc, db_dir))
         fasta_handle.close()
-        sequence = open("%s/sequence.fa" % d, 'r').read()
-        os.remove("%s/sequence.fa" % d)
-        ref = gzip.open("NC_000913.3.fasta.gz", 'r').read()
-        self.assertEqual(sequence, ref)
+        os.remove("%s/sequence.fa.gz" % d)
 
-    #@unittest.skip("skipping")
-    def test_remove_ambiguous_bases(self):
-        d = os.getcwd()
-        ncbi_pjid = '168'
-        fasta_handle = open("/zenodotus/dat01/mason_lab_scratch_reference/cmlab/GENOMES/FASTA/hg19/chr/chr1.fa", 'r')
-        process_seqs.remove_ambiguous_bases(fasta_handle, "%s/%s.fasta.gz" % (d, ncbi_pjid), 'fasta')
-        fasta_handle.close()
-        
-        sequence = gzip.open("%s/%s.fasta.gz" % (d, ncbi_pjid), 'rb').read()
-        ref = gzip.open("chr1.split.fasta.gz", 'rb').read()
-        self.assertEqual(sequence, ref)
-        os.remove("%s/%s.fasta.gz" % (d, ncbi_pjid))
 
     #@unittest.skip("skipping")
     def test_full_pipeline(self):

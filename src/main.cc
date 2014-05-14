@@ -21,8 +21,8 @@ int main(int argc, char const ** argv) {
   addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "STRING"));
   setHelpText(parser, 0, "HDF5 file name");
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
-  setHelpText(parser, 1, "Start k-mer value >= 5");
-  setMinValue(parser, 1, "5");
+  setHelpText(parser, 1, "Start k-mer value >= 3");
+  setMinValue(parser, 1, "3");
   addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
   setHelpText(parser, 2, "End k-mer value <= 31");
   setMaxValue(parser, 2, "31");

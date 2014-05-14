@@ -7,8 +7,8 @@
 #include <seqan/sequence.h>
 #include <seqan/file.h>
 #include <seqan/stream.h>
+#include <seqan/seq_io.h>
 #include <fstream>
-#include <libGkArrays/gkArrays.h>
 
 using namespace seqan;
 using namespace std;
@@ -38,7 +38,7 @@ KMerge::~KMerge() {
   delete this->hdf5_file;
 }
 
-uint KMerge::hash_kmer(const std::string& kmer) {
+uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
   string rc_kmer(kmer.c_str()), combine;
   reverseComplement(rc_kmer);
   if (kmer < rc_kmer) {
@@ -47,7 +47,7 @@ uint KMerge::hash_kmer(const std::string& kmer) {
     combine = rc_kmer + kmer;
   }
 
-  switch (this->hash_type) {
+  switch (hash_type) {
   case LOOKUP3:
     return(hashlittle(combine.c_str(), combine.length(), 0));
   case SPOOKY:
@@ -61,6 +61,10 @@ uint KMerge::hash_kmer(const std::string& kmer) {
   default:
     throw "Invalid hash function provided";
   }
+}
+
+uint KMerge::hash_kmer(const std::string& kmer) {
+  return KMerge::hash_kmer(kmer, this->hash_type);
 }
 
 bool KMerge::add_hash_and_count(std::vector<uint>& hashes, std::vector<uint>& counts, uint kmer_hash_val, uint kmer_count) {
@@ -93,43 +97,41 @@ bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_h
   return true;
 }
 
-bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts /*, get_raw=false */) {
-  std::set<std::string> kmers;
-  // Building the index
-  gkarrays::gkArrays *genome = new gkarrays::gkArrays(&filename[0], k, true /*use bitvector to conserve space*/, 
-						      0 /*not specifying read length*/, 
-						      true /* stranded counting (rev comp counted seperately)*/);
-  gkarrays::readIterator *read_iter = genome->getReads()->begin();
-  uint i = 0, num_iterations = 0;
-  bool all_kmers_found = false;
-  while (!read_iter->isFinished() && !all_kmers_found) {
-    uint *support = genome->getSupport(i);
-    for(uint j = 0; j < genome->getSupportLength(i); j++) {
-      num_iterations++;
-      char *kmer = genome->getTagFactor(i, j, k);
-      if (kmers.find(kmer) == kmers.end()) {
-	kmers.insert(kmer);
-	if(!this->add_hash_and_count(hashed_counts, this->hash_kmer(kmer), support[j])) {
-	  throw "Unable to add hash and count";
-	  return false;
-	}
-      }
-      if (genome->getGkCFALength() == kmers.size()) { //we've seen all kmers in the genome
-        all_kmers_found = true;
-	delete [] kmer;
-        break;
-      }
-      delete [] kmer;
-    }
-    delete [] support;
-    ++(*read_iter);
-    i++;
+bool KMerge::add_hash(std::map<uint, uint>& hashed_counts, uint kmer_hash_val) {
+  if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) {
+    hashed_counts[kmer_hash_val] = 1; 
+  } else {   
+    hashed_counts[kmer_hash_val]++; 
   }
+  return true;
+}
 
-  cout << "Found " << kmers.size() << " distinct " << k << "-mers" << std::endl;
+bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
 
-  delete read_iter;
-  delete genome;
+  seqan::SequenceStream seq_io(filename.c_str());
+
+  seqan::CharString id;
+  seqan::Dna5String seq;
+  std::stringstream kmer;
+
+  while (!atEnd(seq_io)) {
+    if (readRecord(id, seq, seq_io) != 0) continue; 
+    if (length(seq) < k) continue;
+    for (int i = 0; i < length(seq) - k + 1; i++) {
+      seqan::Infix<seqan::Dna5String>::Type sub_seq(seq, i, i+k);
+
+      kmer.str("");
+      kmer << sub_seq;
+
+      if(kmer.str().find("N") != std::string::npos) { // skip kmers containing Ns
+        continue;
+      }
+      if(!this->add_hash(hashed_counts, this->hash_kmer(kmer.str()))) { 
+	throw "Unable to add hash and count";
+	return false;
+      }
+    }
+  }
 
   return true;
 }
@@ -209,7 +211,7 @@ void KMerge::BuilderTask::execute() {
 
   cout << "Working on " << params.group_name << endl;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
-    if (k > THROTTLE_KMER_LENGTH) pthread_mutex_lock( &KMerge::mem_mutex ); //throttle memory for longer k-mers
+    //if (k > THROTTLE_KMER_LENGTH) pthread_mutex_lock( &KMerge::mem_mutex ); //throttle memory for longer k-mers
     //if k = optimal k, also get raw k-mer sequence
     if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
       error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
@@ -218,7 +220,7 @@ void KMerge::BuilderTask::execute() {
       cout << "Finished parsing: " << params.seq_filename << " for k=" << k << std::endl;
       cout << "Hashes vector size now: " << hashed_counts.size() << std::endl;  
     }
-    if (k > THROTTLE_KMER_LENGTH) pthread_mutex_unlock( &KMerge::mem_mutex );
+    //if (k > THROTTLE_KMER_LENGTH) pthread_mutex_unlock( &KMerge::mem_mutex );
     error.str("");
   }
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {

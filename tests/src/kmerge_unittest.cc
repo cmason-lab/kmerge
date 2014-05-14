@@ -6,82 +6,66 @@
 #include "fq.h"
 #include "hdf5file.h"
 #include "catch.hpp"
+#include <sstream>
 #include <dlib/threads.h>
+#include <seqan/basic.h>
+#include <seqan/seq_io.h>
 #include <seqan/sequence.h>
-#include <seqan/alignment_free.h>
-#include <libGkArrays/gkArrays.h>
 
 using namespace seqan;
 using namespace dlib;
 
 
-TEST_CASE("CountKmersWithGKArraysTest", "[HashTest]") {
-  std::map<std::string, uint> gka_counts;
-  // Default k-mer length
+TEST_CASE("CountHashedKmers", "[HashTest") {
   int k = 5;
+  std::map<std::string, uint> kmer_counts, jf_counts;
+  seqan::SequenceStream seq_io("genome.test.fasta.gz");
+  REQUIRE(isGood(seq_io) == true);
+  // Read file record-wise.
+  seqan::CharString id;
+  seqan::Dna5String seq;
+  std::stringstream kmer;
+  while (!atEnd(seq_io)) {
+    REQUIRE(readRecord(id, seq, seq_io) == 0);
+    for (int i = 0; i < length(seq) - k + 1; i++) {
+      seqan::Infix<seqan::Dna5String>::Type sub_seq(seq, i, i+k);
+      
+      kmer.str("");
+      kmer << sub_seq;
 
-  ifstream in_file ("genome.test.kmers.txt");
-  std::string genome_file("genome.test.contig.fa.gz");
-
-  // Building the index
-  gkarrays::gkArrays *genome = new gkarrays::gkArrays(&genome_file[0], k, true, 0, true);
-  
-  // checking number of indexed sequences
-  
-  REQUIRE(genome->getNbTags() == 3);
-  REQUIRE(genome->getGkCFALength() == 424);
-
-  gkarrays::readIterator *read_iter = genome->getReads()->begin();
-  uint i = 0, num_iterations = 0;
-  bool all_kmers_found = false;
-  while (!read_iter->isFinished() && !all_kmers_found) {
-    uint *support = genome->getSupport(i);
-    for(uint j = 0; j < genome->getSupportLength(i); j++) {
-      num_iterations++;
-      char *kmer = genome->getTagFactor(i, j, k);
-      if (gka_counts.count(kmer) == 0) {
-	gka_counts[kmer] = support[j];
+      if(kmer.str().find("N") != std::string::npos) { // skip kmers containing Ns
+	continue;
       }
-      if (genome->getGkCFALength() == gka_counts.size()) {
-	cout << "Breaking early (iteration = " << num_iterations << ")" << endl;
-	all_kmers_found = true;
-	break;
+      if (kmer_counts.find(kmer.str()) != kmer_counts.end()) {
+	kmer_counts[kmer.str()]++;
+      } else {
+	kmer_counts[kmer.str()] = 1;
       }
-      delete [] kmer;
     }
-    delete [] support;
-    ++(*read_iter);
-    i++;
   }
 
-  // compare to jellyfish results
-  // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz
-  // ~/bin/jellyfish count -m 5 -o output -s 10000 <(zcat genome.test.contig.fa.gz)
-  // ~/bin/jellyfish dump -c output > genome.test.kmers.txt
 
-  std::string seq;
+  // compare to jellyfish results
+  // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz                                            // ~/bin/jellyfish count -m 5 -o output -s 10000 <(zcat genome.test.contig.fa.gz)                                                  
+  // ~/bin/jellyfish dump -c output > genome.test.kmers.txt                                                                          
+
+  ifstream in_file ("genome.test.kmers.txt");
+
+  std::string seq2;
   uint count;
   if (in_file.is_open()) {
     while ( !in_file.eof() ) {
-      in_file >> seq >> count;
-      REQUIRE(gka_counts[seq] == count);
+      in_file >> seq2 >> count;
+      if (seq2 != "") {
+	jf_counts[seq2] = count;
+	REQUIRE(kmer_counts[seq2] == count);
+      }
     }
     in_file.close();
   }
-
-  /* Strategy:
-   * Keep a map of the k-mers encountered from a genome, loop through each sequence in the genome
-   * for every k-mer encountered check if we've seen it before, if we have, ignore it,
-   * if we haven't, look at total times k-mer is seen (stored in "count" of "getTagsWithFactor")
-   * record this number of times in k-mer counts for genome and put it in kmers_found map so that it is ignored next time
-   * need to loop over all sequences in the file when doing this to make sure all k-mers are acconted for
-   * STOP when the kmers_found map has the same number of elements as "getGkCFALength".
-   */
-
-  // Free memory.
-  delete read_iter;
-  delete genome;
+  REQUIRE(jf_counts.size() == kmer_counts.size());
 }
+
 
 TEST_CASE("ReverseComplementTest", "[HashTest]") {
   std::string test_seq("ACTAG");
@@ -124,7 +108,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   const std::string COUNT_DATASET_NAME( "/org1/count" );
   std::vector<uint64_t> dims;
   uint k = 5;
-  std::string filename("genome.test.contig.fa.gz");
+  std::string filename("genome.test.fasta.gz");
 
   try {
 
@@ -272,12 +256,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     tp.wait_for_all_tasks();
 
+    delete kmerge;
 
     FastQuery *sample = new FastQuery(params1.hdf5_filename, FQ::FQ_HDF5);
 
     if (!(sample->getVariableInfo(hash_dataset_name, hash_dataset_name, dims, &type, params1.group_name))) {
-      cerr << "Cannot access sample variable information." << endl;
-      exit(EXIT_FAILURE);
+      cerr << "Cannot access sample variable information."  << endl;
     }
 
     REQUIRE(dims[0] == 512);
@@ -286,7 +270,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     if (!(sample->getData("kmer_hash", hashes_arr, &params1.group_name[0]))) {
       cerr << "Cannot access sample hashes" << endl;
-      exit(EXIT_FAILURE);
     }
 
     counts_arr = new uint[dims[0]];
@@ -301,16 +284,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
         kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
-    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
+    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
+    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -364,16 +347,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
         kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
-    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
+    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
+    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -426,16 +409,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
   
     for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer1)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
 	kmer1_pos = pos;
       }
-      if (hashes_arr[pos] == kmerge->hash_kmer(kmer2)) {
+      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
         kmer2_pos = pos;
       }
     }
 
-    REQUIRE(hashes_arr[kmer1_pos] == kmerge->hash_kmer(kmer1));
-    REQUIRE(hashes_arr[kmer2_pos] == kmerge->hash_kmer(kmer2));
+    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
+    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
     REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
     REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
 
@@ -472,7 +455,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     delete sample;
 
-    delete kmerge;
     
     if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
       perror( "Error deleting file");
