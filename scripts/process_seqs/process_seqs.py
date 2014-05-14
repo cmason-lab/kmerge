@@ -112,6 +112,10 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
         sys.stderr.write("!%s!: Could not obtain sequences\n" % ncbi_pjid)
         shutil.rmtree(d)
         return
+
+    if retry > 0:
+        sys.stderr.write("Retrying %s\n" % ncbi_pjid)
+        
     try:
         os.makedirs(d)
     except OSError:
@@ -151,7 +155,7 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
         if os.path.isfile(fasta_file):
             fasta_handle.close()
             os.remove(fasta_file)
-        sys.stderr.write("Retrying %s\n" % ncbi_pjid)    
+ 
         process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_refseq, retry+1, max_retry)
     except Exception as inst:
         sys.stderr.write("!%s!:%s\n" % (ncbi_pjid, type(inst)))
