@@ -206,8 +206,9 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc, error;
   std::map<uint, uint> hashed_counts;
-  std::vector<uint> hashes;
-  std::vector<uint> counts;
+  std::vector<uint> hashes, counts;
+  ofstream out_file(params.tmp_filename.c_str());
+  uint hash, count;
 
   cout << "Working on " << params.group_name << endl;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
@@ -223,14 +224,28 @@ void KMerge::BuilderTask::execute() {
     //if (k > THROTTLE_KMER_LENGTH) pthread_mutex_unlock( &KMerge::mem_mutex );
     error.str("");
   }
+
+
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    hashes.push_back(iter->first);
-    counts.push_back(iter->second);
+    out_file << iter->first << "\t" << iter->second << endl;
   }
+
   // remove all elements from map as they are no longer needed
   std::map<uint, uint>().swap( hashed_counts );
 
+  out_file.close();
+
   pthread_mutex_lock( &KMerge::mutex );
+
+  ifstream in_file(params.tmp_filename.c_str());
+
+  while (in_file >> hash >> count) {
+    hashes.push_back(hash);
+    counts.push_back(count);
+  }
+
+  in_file.close();
+  remove(params.tmp_filename.c_str());
 
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0]))) {
     error << "Unable to add hashes for " << params.group_name << endl;

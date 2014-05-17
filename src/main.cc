@@ -66,7 +66,7 @@ int main(int argc, char const ** argv) {
   struct stat st;
   DIR *dirp;
   struct dirent *dp;
-  stringstream seq_filename, file_loc, dataset_name;
+  stringstream seq_filename, file_loc, dataset_name, tmp_filename;
   vector<uint> hashes;
   vector<uint> counts;
   std::string group_name("");
@@ -98,6 +98,9 @@ int main(int argc, char const ** argv) {
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "count";
 	    params.counts_dataset_name = dataset_name.str();
+	    tmp_filename.str("");
+	    tmp_filename << seq_dir << "/" << s_org << "/" << "tmp.txt";
+	    params.tmp_filename = tmp_filename.str();
 	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
             tp.add_task(*task, &KMerge::BuilderTask::execute);
 	    task_ptrs.push_back(task);

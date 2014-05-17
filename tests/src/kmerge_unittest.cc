@@ -86,6 +86,35 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   delete kmerge;
 }
 
+TEST_CASE("SerializeAndDeserializeMap", "[SerializeTest]") {
+  std::map<uint, uint> m;
+  ofstream out_file("test_serialize.txt");
+  uint hash, count;
+  std::vector<uint> hashes, counts;
+
+  m[0] = 4;
+  m[1] = 1;
+  m[2] = 0;
+  m[3] = 2;
+
+  for (std::map<uint, uint>::const_iterator m_iter = m.begin(); m_iter != m.end(); m_iter++) {
+    out_file << m_iter->first << "\t" << m_iter->second << endl;
+  }
+  out_file.close();
+
+  ifstream in_file("test_serialize.txt");
+
+  while (in_file >> hash >> count) {
+    hashes.push_back(hash);
+    counts.push_back(count);
+  }
+  in_file.close();
+  remove("test_serialize.txt");
+
+  for (uint i = 0; i < m.size(); i++) {
+    REQUIRE(m[hashes[i]] == counts[i]);
+  }
+}
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
@@ -223,16 +252,19 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
   params1.group_name = "/208831";
+  params1.tmp_filename = "/home/darryl/Development/kmerge/tests/208831/tmp.txt";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
   params2.group_name = "/209328";
+  params2.tmp_filename = "/home/darryl/Development/kmerge/tests/209328/tmp.txt";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
   params3.group_name = "/54095";
+  params3.tmp_filename = "/home/darryl/Development/kmerge/tests/54095/tmp.txt";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";
 
