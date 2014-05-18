@@ -206,13 +206,9 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc, error;
   std::map<uint, uint> hashed_counts;
-  std::vector<uint> hashes, counts;
-  ofstream out_file(params.tmp_filename.c_str());
-  uint hash, count;
 
   cout << "Working on " << params.group_name << endl;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
-    //if (k > THROTTLE_KMER_LENGTH) pthread_mutex_lock( &KMerge::mem_mutex ); //throttle memory for longer k-mers
     //if k = optimal k, also get raw k-mer sequence
     if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
       error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
@@ -221,52 +217,44 @@ void KMerge::BuilderTask::execute() {
       cout << "Finished parsing: " << params.seq_filename << " for k=" << k << std::endl;
       cout << "Hashes vector size now: " << hashed_counts.size() << std::endl;  
     }
-    //if (k > THROTTLE_KMER_LENGTH) pthread_mutex_unlock( &KMerge::mem_mutex );
     error.str("");
   }
 
+  uint hash_count = hashed_counts.size();
 
+  std::vector<uint> hashes(hash_count), counts(hash_count);
+
+  uint i = 0;
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    out_file << iter->first << "\t" << iter->second << endl;
+    hashes[i] = iter->first;
+    counts[i] = iter->second;
+    i++;
   }
 
   // remove all elements from map as they are no longer needed
   std::map<uint, uint>().swap( hashed_counts );
 
-  out_file.close();
-
-  pthread_mutex_lock( &KMerge::mutex );
-
-  ifstream in_file(params.tmp_filename.c_str());
-
-  while (in_file >> hash >> count) {
-    hashes.push_back(hash);
-    counts.push_back(count);
-  }
-
-  in_file.close();
-  remove(params.tmp_filename.c_str());
-
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0]))) {
     error << "Unable to add hashes for " << params.group_name << endl;
     throw error.str();
   }
+  //clear memory
+  std::vector<uint>().swap(hashes);
+
   if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0]))) {
     error << "Unable to add counts for " << params.group_name << endl;
     throw error.str();
   }
+  //clear memory
+  std::vector<uint>().swap(counts);
 
   if(!(params.kmerge->add_taxonomy(params.group_name))) {
     error << "Unable to add classifications for " << params.group_name << endl;
     throw error.str();
   }
 
-  pthread_mutex_unlock( &KMerge::mutex );
+  cout << hash_count << " k-mer hashes for " << params.group_name << endl;
 
-  cout << hashes.size() << " k-mer hashes for " << params.group_name << endl;
-  // clear memory
-  std::vector<uint>().swap(hashes);
-  std::vector<uint>().swap(counts);
   cout << "Done (" << params.group_name  << ")" << endl;
   return;
 

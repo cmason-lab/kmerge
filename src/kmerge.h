@@ -23,7 +23,6 @@ struct param_struct {
   std::string hdf5_filename;
   uint k_val_start;
   uint k_val_end;
-  std::string tmp_filename;
   std::string seq_filename;
   std::string group_name;
   std::string hash_dataset_name;

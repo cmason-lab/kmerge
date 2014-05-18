@@ -252,19 +252,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
   params1.group_name = "/208831";
-  params1.tmp_filename = "/home/darryl/Development/kmerge/tests/208831/tmp.txt";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
   params2.group_name = "/209328";
-  params2.tmp_filename = "/home/darryl/Development/kmerge/tests/209328/tmp.txt";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
   params3.group_name = "/54095";
-  params3.tmp_filename = "/home/darryl/Development/kmerge/tests/54095/tmp.txt";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";
 
