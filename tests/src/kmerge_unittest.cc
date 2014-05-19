@@ -88,9 +88,12 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
 
 TEST_CASE("SerializeAndDeserializeMap", "[SerializeTest]") {
   std::map<uint, uint> m;
-  ofstream out_file("test_serialize.txt");
+  std::string h5_filename("test_serialize.h5");
   uint hash, count;
   std::vector<uint> hashes, counts;
+  std::vector<uint64_t> dims;
+
+  std::string hash_dataset_path( "/kmer_hash" ), count_dataset_path( "/count" ), hash_dataset_name("kmer_hash"), counts_dataset_name("count");
 
   m[0] = 4;
   m[1] = 1;
@@ -98,22 +101,55 @@ TEST_CASE("SerializeAndDeserializeMap", "[SerializeTest]") {
   m[3] = 2;
 
   for (std::map<uint, uint>::const_iterator m_iter = m.begin(); m_iter != m.end(); m_iter++) {
-    out_file << m_iter->first << "\t" << m_iter->second << endl;
+    hashes.push_back(m_iter->first);
+    counts.push_back(m_iter->second);
   }
-  out_file.close();
 
-  ifstream in_file("test_serialize.txt");
+  HDF5 *out_h5 = new HDF5(h5_filename, false);
 
-  while (in_file >> hash >> count) {
-    hashes.push_back(hash);
-    counts.push_back(count);
+
+  dims.push_back(hashes.size());
+  REQUIRE(out_h5->createDataset(hash_dataset_path, dims, FQ::FQT_UINT) == true);
+
+  REQUIRE(out_h5->setData(hash_dataset_path, &hashes[0]) == true);
+
+  REQUIRE(out_h5->createDataset(count_dataset_path, dims, FQ::FQT_UINT) == true);
+  REQUIRE(out_h5->setData(count_dataset_path, &counts[0]) == true);
+  
+  delete out_h5;
+
+  std::vector<uint>().swap( hashes );
+  std::vector<uint>().swap( counts );
+
+  HDF5 *in_h5 = new HDF5(h5_filename, true);
+
+  FQ::DataType type;
+
+  uint *hashes_arr = new uint[dims[0]];
+
+  if (!(in_h5->getData(hash_dataset_path, hashes_arr))) {
+    cerr << "Cannot access sample hashes" << endl;
+    exit(EXIT_FAILURE);
   }
-  in_file.close();
-  remove("test_serialize.txt");
+
+  uint* counts_arr = new uint[dims[0]];
+
+  if(!(in_h5->getData(count_dataset_path, counts_arr))) {
+    cerr << "Cannot access sample counts" << endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete in_h5;
+
+  
+  remove(h5_filename.c_str());
 
   for (uint i = 0; i < m.size(); i++) {
-    REQUIRE(m[hashes[i]] == counts[i]);
+    REQUIRE(m[hashes_arr[i]] == counts_arr[i]);
   }
+ 
+  delete [] hashes_arr;
+  delete [] counts_arr;
 }
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
@@ -166,8 +202,8 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
       if (*v_iter == kmerge->hash_kmer(kmer1)) {
 	kmer1_pos = pos;
       }
-      if (*v_iter == kmerge->hash_kmer(kmer2)) {                                                                                                                                                                                                                                                                                                                   
-        kmer2_pos = pos;                                                                                                                                                                                                                                                                                                                                                  
+      if (*v_iter == kmerge->hash_kmer(kmer2)) {                         
+        kmer2_pos = pos;            
       }  
       pos++;
     }
@@ -176,8 +212,8 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     REQUIRE(counts[kmer2_pos] == kmer1_count + kmer2_count);
 
     
-    kmerge->add_dataset(HASH_DATASET_NAME, hashes.size(), &hashes[0]);
-    kmerge->add_dataset(COUNT_DATASET_NAME, counts.size(), &counts[0]);
+    kmerge->add_dataset(HASH_DATASET_NAME, hashes.size(), &hashes[0], NULL);
+    kmerge->add_dataset(COUNT_DATASET_NAME, counts.size(), &counts[0], NULL);
     
     delete kmerge;
 
@@ -251,16 +287,19 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
+  params1.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/208831/tmp.h5";
   params1.group_name = "/208831";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
+  params2.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/209328/tmp.h5";
   params2.group_name = "/209328";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
+  params3.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/54095/tmp.h5";
   params3.group_name = "/54095";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";

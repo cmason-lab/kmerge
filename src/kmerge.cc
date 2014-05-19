@@ -136,22 +136,43 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
   return true;
 }
 
-bool KMerge::add_dataset(const std::string dataset_path, uint data_size, const uint* data) {
+
+bool KMerge::add_dataset(const std::string dataset_path, const uint data_size, const uint* data, HDF5* h5_file=NULL) {
   std::vector<uint64_t> dims;
 
+  if (h5_file == NULL) {
+    h5_file = this->hdf5_file;
+  }
 
   dims.push_back(data_size);
-  if (!(this->hdf5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
+  if (!(h5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
     throw "Unable to create dataset";
     return false;
   }
-  if (!(this->hdf5_file->setData(dataset_path, data))) {
+  if (!(h5_file->setData(dataset_path, data))) {
     throw "Unable to set data for dataset";
     return false;
   }
 
   return true;
 }
+
+uint* KMerge::get_dataset(const std::string h5_filename, const uint data_size, const std::string dataset_path) {
+  HDF5 *h5 = new HDF5(h5_filename);
+
+  uint* data = new uint[data_size];
+
+  if(!(h5->getData(dataset_path, data))) {
+    cerr << "Cannot access data" << endl;
+    exit(EXIT_FAILURE);
+  }
+  
+  delete h5;
+  
+  return data;
+}
+
+
 
 bool KMerge::add_taxonomy(const std::string& group) {
   std::stringstream path, in_file_ss, path_root, error;
@@ -234,28 +255,59 @@ void KMerge::BuilderTask::execute() {
   // remove all elements from map as they are no longer needed
   std::map<uint, uint>().swap( hashed_counts );
 
-  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0]))) {
-    error << "Unable to add hashes for " << params.group_name << endl;
+  HDF5 *out_h5 = new HDF5(params.tmp_h5_filename, false);
+
+  if(!(params.kmerge->add_dataset("/kmer_hash", hash_count, &hashes[0], out_h5))) {
+    error << "Unable to add hashes for " << params.group_name << " to temp file." << endl;
     throw error.str();
   }
+
   //clear memory
   std::vector<uint>().swap(hashes);
 
-  if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0]))) {
+  if(!(params.kmerge->add_dataset("/count", hash_count, &counts[0], out_h5))) {
+    error << "Unable to add counts for " << params.group_name << " to temp file." << endl;
+    throw error.str();
+  }
+
+  //clear memory
+  std::vector<uint>().swap(counts);
+
+  delete out_h5;
+
+  pthread_mutex_lock( &KMerge::mutex );
+
+  uint* hashes_arr = params.kmerge->get_dataset(params.tmp_h5_filename, hash_count, "/kmer_hash");
+
+  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hash_count, hashes_arr, NULL))) {
+    error << "Unable to add hashes for " << params.group_name << endl;
+    throw error.str();
+  }
+
+  delete [] hashes_arr;
+
+  uint* counts_arr = params.kmerge->get_dataset(params.tmp_h5_filename, hash_count, "/count");
+
+  if(!(params.kmerge->add_dataset(params.counts_dataset_name, hash_count, counts_arr, NULL))) {
     error << "Unable to add counts for " << params.group_name << endl;
     throw error.str();
   }
-  //clear memory
-  std::vector<uint>().swap(counts);
+
+  delete [] counts_arr;
 
   if(!(params.kmerge->add_taxonomy(params.group_name))) {
     error << "Unable to add classifications for " << params.group_name << endl;
     throw error.str();
   }
 
+  pthread_mutex_unlock( &KMerge::mutex );
+
   cout << hash_count << " k-mer hashes for " << params.group_name << endl;
 
   cout << "Done (" << params.group_name  << ")" << endl;
+
+  remove(params.tmp_h5_filename.c_str());
+
   return;
 
 }

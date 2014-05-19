@@ -98,6 +98,9 @@ int main(int argc, char const ** argv) {
 	    dataset_name.str("");
 	    dataset_name << "/" << s_org << "/" << "count";
 	    params.counts_dataset_name = dataset_name.str();
+	    tmp_filename.str("");
+	    tmp_filename << seq_dir << "/" << s_org << "/" << "tmp.h5";
+	    params.tmp_h5_filename = tmp_filename.str();
 	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
             tp.add_task(*task, &KMerge::BuilderTask::execute);
 	    task_ptrs.push_back(task);
