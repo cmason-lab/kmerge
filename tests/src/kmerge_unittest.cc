@@ -8,6 +8,7 @@
 #include "catch.hpp"
 #include <sstream>
 #include <dlib/threads.h>
+#include <dlib/serialize.h>
 #include <seqan/basic.h>
 #include <seqan/seq_io.h>
 #include <seqan/sequence.h>
@@ -86,15 +87,10 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   delete kmerge;
 }
 
-TEST_CASE("SerializeAndDeserializeMap", "[SerializeTest]") {
+TEST_CASE("SerializeAndDeserializeVectors", "[SerializeTest]") {
   std::map<uint, uint> m;
-  std::string h5_filename("test_serialize.h5");
-  uint hash, count;
   std::vector<uint> hashes, counts;
-  std::vector<uint64_t> dims;
-
-  std::string hash_dataset_path( "/kmer_hash" ), count_dataset_path( "/count" ), hash_dataset_name("kmer_hash"), counts_dataset_name("count");
-
+  
   m[0] = 4;
   m[1] = 1;
   m[2] = 0;
@@ -105,51 +101,39 @@ TEST_CASE("SerializeAndDeserializeMap", "[SerializeTest]") {
     counts.push_back(m_iter->second);
   }
 
-  HDF5 *out_h5 = new HDF5(h5_filename, false);
-
-
-  dims.push_back(hashes.size());
-  REQUIRE(out_h5->createDataset(hash_dataset_path, dims, FQ::FQT_UINT) == true);
-
-  REQUIRE(out_h5->setData(hash_dataset_path, &hashes[0]) == true);
-
-  REQUIRE(out_h5->createDataset(count_dataset_path, dims, FQ::FQT_UINT) == true);
-  REQUIRE(out_h5->setData(count_dataset_path, &counts[0]) == true);
-  
-  delete out_h5;
+  ofstream out_hashes_file("tmp_hashes.bin", ios::out | ios::binary), out_counts_file("tmp_counts.bin", ios::out | ios::binary);
+  try {
+    serialize(hashes, out_hashes_file);
+    serialize(counts, out_counts_file);
+  } catch (serialization_error& e) {
+    cout << "Unable to serialize data" << endl;
+  }
 
   std::vector<uint>().swap( hashes );
   std::vector<uint>().swap( counts );
 
-  HDF5 *in_h5 = new HDF5(h5_filename, true);
+  out_hashes_file.close();
+  out_counts_file.close();
 
-  FQ::DataType type;
+  ifstream in_hashes_file("tmp_hashes.bin", ios::in | ios::binary), in_counts_file("tmp_counts.bin", ios::in | ios::binary);
 
-  uint *hashes_arr = new uint[dims[0]];
-
-  if (!(in_h5->getData(hash_dataset_path, hashes_arr))) {
-    cerr << "Cannot access sample hashes" << endl;
-    exit(EXIT_FAILURE);
+  try {
+    deserialize(hashes, in_hashes_file);
+    deserialize(counts, in_counts_file);
+  } catch (serialization_error& e) {
+    cout << "Unable to deserialize data" << endl;
   }
 
-  uint* counts_arr = new uint[dims[0]];
+  in_hashes_file.close();
+  in_hashes_file.close();
 
-  if(!(in_h5->getData(count_dataset_path, counts_arr))) {
-    cerr << "Cannot access sample counts" << endl;
-    exit(EXIT_FAILURE);
-  }
-
-  delete in_h5;
-
-  
-  remove(h5_filename.c_str());
+  remove("tmp_hashes.bin");
+  remove("tmp_counts.bin");
 
   for (uint i = 0; i < m.size(); i++) {
-    REQUIRE(m[hashes_arr[i]] == counts_arr[i]);
+    REQUIRE(m[hashes[i]] == counts[i]);
   }
- 
-  delete [] hashes_arr;
-  delete [] counts_arr;
+
 }
 
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
@@ -287,19 +271,22 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_example.h5";
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
-  params1.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/208831/tmp.h5";
+  params1.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/208831/hashes.bin";
+  params1.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/208831/counts.bin";
   params1.group_name = "/208831";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
-  params2.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/209328/tmp.h5";
+  params2.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/209328/hashes.bin";
+  params2.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/209328/counts.bin";
   params2.group_name = "/209328";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
-  params3.tmp_h5_filename = "/home/darryl/Development/kmerge/tests/54095/tmp.h5";
+  params3.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/54095/hashes.bin";
+  params3.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/54095/counts.bin";
   params3.group_name = "/54095";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";

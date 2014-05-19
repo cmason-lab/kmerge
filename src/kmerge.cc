@@ -3,6 +3,7 @@
 #include "SpookyV2.h"
 #include "MurmurHash3.h"
 #include "city.h"
+#include <dlib/serialize.h>
 #include <seqan/basic.h>
 #include <seqan/sequence.h>
 #include <seqan/file.h>
@@ -12,9 +13,9 @@
 
 using namespace seqan;
 using namespace std;
+using namespace dlib;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t KMerge::mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir) {
   this->hdf5_file = new HDF5(filename, false);
@@ -157,22 +158,6 @@ bool KMerge::add_dataset(const std::string dataset_path, const uint data_size, c
   return true;
 }
 
-uint* KMerge::get_dataset(const std::string h5_filename, const uint data_size, const std::string dataset_path) {
-  HDF5 *h5 = new HDF5(h5_filename);
-
-  uint* data = new uint[data_size];
-
-  if(!(h5->getData(dataset_path, data))) {
-    cerr << "Cannot access data" << endl;
-    exit(EXIT_FAILURE);
-  }
-  
-  delete h5;
-  
-  return data;
-}
-
-
 
 bool KMerge::add_taxonomy(const std::string& group) {
   std::stringstream path, in_file_ss, path_root, error;
@@ -243,57 +228,77 @@ void KMerge::BuilderTask::execute() {
 
   uint hash_count = hashed_counts.size();
 
-  std::vector<uint> hashes(hash_count), counts(hash_count);
+  std::vector<uint> hashes, counts;
 
-  uint i = 0;
   for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    hashes[i] = iter->first;
-    counts[i] = iter->second;
-    i++;
+    hashes.push_back(iter->first);
+    counts.push_back(iter->second);
   }
 
   // remove all elements from map as they are no longer needed
   std::map<uint, uint>().swap( hashed_counts );
 
-  HDF5 *out_h5 = new HDF5(params.tmp_h5_filename, false);
+  ofstream out_hashes_file(params.tmp_hashes_filename.c_str(), ios::out | ios::binary), 
+    out_counts_file(params.tmp_counts_filename.c_str(), ios::out | ios::binary);
 
-  if(!(params.kmerge->add_dataset("/kmer_hash", hash_count, &hashes[0], out_h5))) {
-    error << "Unable to add hashes for " << params.group_name << " to temp file." << endl;
-    throw error.str();
+  try {
+    serialize(hashes, out_hashes_file);
+  } catch (serialization_error& e) {
+    cerr << "Unable to serialize hashes (" << params.group_name << ")" << endl;
+    return;
   }
 
-  //clear memory
-  std::vector<uint>().swap(hashes);
+  std::vector<uint>().swap( hashes );
+  out_hashes_file.close();
 
-  if(!(params.kmerge->add_dataset("/count", hash_count, &counts[0], out_h5))) {
-    error << "Unable to add counts for " << params.group_name << " to temp file." << endl;
-    throw error.str();
+
+  try {
+    serialize(counts, out_counts_file);
+  } catch (serialization_error& e) {
+    cerr << "Unable to serialize counts (" << params.group_name << ")" << endl;
+    return;
   }
 
-  //clear memory
-  std::vector<uint>().swap(counts);
+  std::vector<uint>().swap( counts );
+  out_counts_file.close();
 
-  delete out_h5;
 
   pthread_mutex_lock( &KMerge::mutex );
 
-  uint* hashes_arr = params.kmerge->get_dataset(params.tmp_h5_filename, hash_count, "/kmer_hash");
+  ifstream in_hashes_file(params.tmp_hashes_filename.c_str(), ios::in | ios::binary), 
+    in_counts_file(params.tmp_counts_filename.c_str(), ios::in | ios::binary);
+  
+  try {
+    deserialize(hashes, in_hashes_file);
+  } catch (serialization_error& e) {
+    cerr << "Unable to deserialize hashes (" << params.group_name << ")" << endl;
+    return;
+  }
 
-  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hash_count, hashes_arr, NULL))) {
+  in_hashes_file.close();
+
+  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
     error << "Unable to add hashes for " << params.group_name << endl;
     throw error.str();
   }
+  std::vector<uint>().swap( hashes );
 
-  delete [] hashes_arr;
+  try {
+    deserialize(counts, in_counts_file);
+  } catch (serialization_error& e) {
+    cerr << "Unable to deserialize counts (" << params.group_name << ")" << endl;
+    return;
+  }
 
-  uint* counts_arr = params.kmerge->get_dataset(params.tmp_h5_filename, hash_count, "/count");
+  in_counts_file.close();
 
-  if(!(params.kmerge->add_dataset(params.counts_dataset_name, hash_count, counts_arr, NULL))) {
+
+  if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
     error << "Unable to add counts for " << params.group_name << endl;
     throw error.str();
   }
 
-  delete [] counts_arr;
+  std::vector<uint>().swap( counts );
 
   if(!(params.kmerge->add_taxonomy(params.group_name))) {
     error << "Unable to add classifications for " << params.group_name << endl;
@@ -306,8 +311,8 @@ void KMerge::BuilderTask::execute() {
 
   cout << "Done (" << params.group_name  << ")" << endl;
 
-  remove(params.tmp_h5_filename.c_str());
-
+  remove(params.tmp_hashes_filename.c_str());
+  remove(params.tmp_counts_filename.c_str());
   return;
 
 }

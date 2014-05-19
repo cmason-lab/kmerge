@@ -24,7 +24,8 @@ struct param_struct {
   uint k_val_start;
   uint k_val_end;
   std::string seq_filename;
-  std::string tmp_h5_filename;
+  std::string tmp_hashes_filename;
+  std::string tmp_counts_filename;
   std::string group_name;
   std::string hash_dataset_name;
   std::string counts_dataset_name;
@@ -37,14 +38,12 @@ class KMerge {
   HashEnumType hash_type;
   std::string dir;
   static pthread_mutex_t mutex;
-  static pthread_mutex_t mem_mutex;
 
  public:
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
-  uint* get_dataset(const std::string, const uint, const std::string);
   bool add_taxonomy(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
