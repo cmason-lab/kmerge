@@ -1,6 +1,5 @@
 #include "kmerge.h"
 #include "lookup3.c"
-#include "SpookyV2.h"
 #include "MurmurHash3.h"
 #include "city.h"
 #include <dlib/serialize.h>
@@ -13,13 +12,15 @@
 
 using namespace seqan;
 using namespace std;
-using namespace dlib;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir) {
+KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
+
   this->hdf5_file = new HDF5(filename, false);
   this->dir = dir;
+  this->dlog.set_level(dlib::LALL);
+
 
   if (hash_func == "lookup3") {
     this->hash_type = LOOKUP3;
@@ -52,7 +53,7 @@ uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
   case LOOKUP3:
     return(hashlittle(combine.c_str(), combine.length(), 0));
   case SPOOKY:
-    return(SpookyHash::Hash32(combine.c_str(), combine.length(), 0));
+      return(SpookyHash::Hash32(combine.c_str(), combine.length(), 0));
   case MURMUR:
     uint out;
     MurmurHash3_x86_32  ( combine.c_str(), combine.length(), 0, &out );
@@ -128,7 +129,7 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
         continue;
       }
       if(!this->add_hash(hashed_counts, this->hash_kmer(kmer.str()))) { 
-	throw "Unable to add hash and count";
+	this->dlog << dlib::LERROR << "Unable to add hash: " << kmer.str();
 	return false;
       }
     }
@@ -147,11 +148,11 @@ bool KMerge::add_dataset(const std::string dataset_path, const uint data_size, c
 
   dims.push_back(data_size);
   if (!(h5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
-    throw "Unable to create dataset";
+    this->dlog << dlib::LERROR << "Unable to create dataset " << dataset_path;
     return false;
   }
   if (!(h5_file->setData(dataset_path, data))) {
-    throw "Unable to set data for dataset";
+    this->dlog << dlib::LERROR << "Unable to set data for dataset" << dataset_path;
     return false;
   }
 
@@ -183,8 +184,7 @@ bool KMerge::add_taxonomy(const std::string& group) {
       path << "/" << token;
     }
     if (!(this->hdf5_file->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
-      error << "Unable to add classification:" << path.str();
-      throw error.str();
+      this->dlog << dlib::LERROR << "Unable to add classification:" << path.str();
       return false;
     }
   }
@@ -210,20 +210,19 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
 }
 
 void KMerge::BuilderTask::execute() {
-  stringstream file_name, file_loc, error;
+  stringstream file_name, file_loc;
   std::map<uint, uint> hashed_counts;
 
-  cout << "Working on " << params.group_name << endl;
+  params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
     //if k = optimal k, also get raw k-mer sequence
     if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
-      error << "Unable to parse " << params.seq_filename << " for k=" << k << std::endl;
-      throw error.str();
+      params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename << " for k=" << k;
+      return;
     } else {
-      cout << "Finished parsing: " << params.seq_filename << " for k=" << k << std::endl;
-      cout << "Hashes vector size now: " << hashed_counts.size() << std::endl;  
+      params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename << " for k=" << k;
+      params.kmerge->dlog << dlib::LINFO << "Hashes vector size now: " << hashed_counts.size();  
     }
-    error.str("");
   }
 
   uint hash_count = hashed_counts.size();
@@ -242,9 +241,11 @@ void KMerge::BuilderTask::execute() {
     out_counts_file(params.tmp_counts_filename.c_str(), ios::out | ios::binary);
 
   try {
-    serialize(hashes, out_hashes_file);
-  } catch (serialization_error& e) {
-    cerr << "Unable to serialize hashes (" << params.group_name << ")" << endl;
+    params.kmerge->dlog << dlib::LINFO << "Serializing hashes for  " << params.group_name; 
+    dlib::serialize(hashes, out_hashes_file);
+    params.kmerge->dlog << dlib::LINFO << "Finished serializing hashes for  " << params.group_name;
+  } catch (dlib::serialization_error& e) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to serialize hashes (" << params.group_name << ")";
     return;
   }
 
@@ -253,9 +254,11 @@ void KMerge::BuilderTask::execute() {
 
 
   try {
-    serialize(counts, out_counts_file);
-  } catch (serialization_error& e) {
-    cerr << "Unable to serialize counts (" << params.group_name << ")" << endl;
+    params.kmerge->dlog << dlib::LINFO << "Serializing counts for  " << params.group_name;
+    dlib::serialize(counts, out_counts_file);
+    params.kmerge->dlog << dlib::LINFO << "Finished serializing counts for  " << params.group_name;
+  } catch (dlib::serialization_error& e) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to serialize counts (" << params.group_name << ")";
     return;
   }
 
@@ -269,24 +272,28 @@ void KMerge::BuilderTask::execute() {
     in_counts_file(params.tmp_counts_filename.c_str(), ios::in | ios::binary);
   
   try {
-    deserialize(hashes, in_hashes_file);
-  } catch (serialization_error& e) {
-    cerr << "Unable to deserialize hashes (" << params.group_name << ")" << endl;
+    params.kmerge->dlog << dlib::LINFO << "De-serializing hashes for  " << params.group_name;
+    dlib::deserialize(hashes, in_hashes_file);
+    params.kmerge->dlog << dlib::LINFO << "Finished de-serializing hashes for  " << params.group_name;
+  } catch (dlib::serialization_error& e) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to deserialize hashes (" << params.group_name << ")";
     return;
   }
 
   in_hashes_file.close();
 
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
-    error << "Unable to add hashes for " << params.group_name << endl;
-    throw error.str();
+    params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    return;
   }
   std::vector<uint>().swap( hashes );
 
   try {
-    deserialize(counts, in_counts_file);
-  } catch (serialization_error& e) {
-    cerr << "Unable to deserialize counts (" << params.group_name << ")" << endl;
+    params.kmerge->dlog << dlib::LINFO << "De-serializing counts for  " << params.group_name;
+    dlib::deserialize(counts, in_counts_file);
+    params.kmerge->dlog << dlib::LINFO << "Finished de-serializing counts for  " << params.group_name;
+  } catch (dlib::serialization_error& e) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to deserialize counts (" << params.group_name << ")";
     return;
   }
 
@@ -294,22 +301,22 @@ void KMerge::BuilderTask::execute() {
 
 
   if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
-    error << "Unable to add counts for " << params.group_name << endl;
-    throw error.str();
+    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    return;
   }
 
   std::vector<uint>().swap( counts );
 
   if(!(params.kmerge->add_taxonomy(params.group_name))) {
-    error << "Unable to add classifications for " << params.group_name << endl;
-    throw error.str();
+    params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
+    return;
   }
 
   pthread_mutex_unlock( &KMerge::mutex );
 
-  cout << hash_count << " k-mer hashes for " << params.group_name << endl;
+  params.kmerge->dlog << dlib::LINFO << hash_count << " k-mer hashes for " << params.group_name;
 
-  cout << "Done (" << params.group_name  << ")" << endl;
+  params.kmerge->dlog << dlib::LINFO << "Done (" << params.group_name  << ")";
 
   remove(params.tmp_hashes_filename.c_str());
   remove(params.tmp_counts_filename.c_str());

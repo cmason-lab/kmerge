@@ -9,12 +9,12 @@
 #include <sstream>
 #include <dlib/threads.h>
 #include <dlib/serialize.h>
+#include <dlib/logger.h>
 #include <seqan/basic.h>
 #include <seqan/seq_io.h>
 #include <seqan/sequence.h>
 
 using namespace seqan;
-using namespace dlib;
 
 
 TEST_CASE("CountHashedKmers", "[HashTest") {
@@ -103,9 +103,9 @@ TEST_CASE("SerializeAndDeserializeVectors", "[SerializeTest]") {
 
   ofstream out_hashes_file("tmp_hashes.bin", ios::out | ios::binary), out_counts_file("tmp_counts.bin", ios::out | ios::binary);
   try {
-    serialize(hashes, out_hashes_file);
-    serialize(counts, out_counts_file);
-  } catch (serialization_error& e) {
+    dlib::serialize(hashes, out_hashes_file);
+    dlib::serialize(counts, out_counts_file);
+  } catch (dlib::serialization_error& e) {
     cout << "Unable to serialize data" << endl;
   }
 
@@ -118,9 +118,9 @@ TEST_CASE("SerializeAndDeserializeVectors", "[SerializeTest]") {
   ifstream in_hashes_file("tmp_hashes.bin", ios::in | ios::binary), in_counts_file("tmp_counts.bin", ios::in | ios::binary);
 
   try {
-    deserialize(hashes, in_hashes_file);
-    deserialize(counts, in_counts_file);
-  } catch (serialization_error& e) {
+    dlib::deserialize(hashes, in_hashes_file);
+    dlib::deserialize(counts, in_counts_file);
+  } catch (dlib::serialization_error& e) {
     cout << "Unable to deserialize data" << endl;
   }
 
@@ -293,7 +293,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   uint thread_count = 3;
 
-  thread_pool tp(thread_count);
+  dlib::thread_pool tp(thread_count);
   try {
     KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
 

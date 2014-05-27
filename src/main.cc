@@ -12,7 +12,6 @@
 
 using namespace seqan;
 using namespace std;
-using namespace dlib;
 
 int main(int argc, char const ** argv) {
   ArgumentParser parser("kmerge");
@@ -74,7 +73,7 @@ int main(int argc, char const ** argv) {
   std::string count_dataset_name("");
   vector<KMerge::BuilderTask*> task_ptrs;
  
-  thread_pool tp(num_threads);
+  dlib::thread_pool tp(num_threads);
   dirp = opendir(seq_dir.c_str());
   KMerge *kmerge = new KMerge(hdf5_filename, hash_func, seq_dir);
   while ((dp = readdir(dirp)) != NULL) {

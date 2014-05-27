@@ -5,7 +5,8 @@
 #include <pthread.h>
 #include "fq.h"
 #include "hdf5file.h"
-
+#include "SpookyV2.h"
+#include <dlib/logger.h> 
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
 #define THROTTLE_KMER_LENGTH 19 //lock k-mer counting above this value to throttle memory allocation for longer k-mers
@@ -38,6 +39,7 @@ class KMerge {
   HashEnumType hash_type;
   std::string dir;
   static pthread_mutex_t mutex;
+  dlib::logger dlog;
 
  public:
   KMerge(const std::string&, const std::string&, const std::string&);
