@@ -1,65 +1,88 @@
-#include <seqan/basic.h>
-#include <seqan/sequence.h>
-#include <seqan/file.h>
-#include <seqan/arg_parse.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <string>
-#include <seqan/stream.h>
 #include <fstream>
 #include "kmerge.h"
 #include <dlib/threads.h>
+#include <dlib/cmd_line_parser.h>
 
-using namespace seqan;
 using namespace std;
 
 int main(int argc, char const ** argv) {
-  ArgumentParser parser("kmerge");
+  dlib::command_line_parser parser;
 
+  parser.add_option("o","HDF5 file name", 1);
+  parser.add_option("k", "Start and end k-mer values", 2);
+  parser.add_option("d", "Location of sequences and taxonomy directories", 1);
+  parser.add_option("i", "Location of single sequence file", 1);
+  parser.add_option("t", "Number of threads to use", 1);
+  parser.add_option("f", "Hash function to use for k-mers", 1);
+  parser.add_option("h","Display this help message.");
 
-  addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "STRING"));
-  setHelpText(parser, 0, "HDF5 file name");
-  addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
-  setHelpText(parser, 1, "Start k-mer value >= 3");
-  setMinValue(parser, 1, "3");
-  addArgument(parser, ArgParseArgument(ArgParseArgument::INTEGER, "INT"));
-  setHelpText(parser, 2, "End k-mer value <= 31");
-  setMaxValue(parser, 2, "31");
-  addOption(parser, ArgParseOption("d", "directory", "Location of sequences and taxonomy directories",
-				     ArgParseArgument::STRING, "STRING"));
-  addOption(parser, ArgParseOption("t", "threads", "Number of threads to use.",
-					  ArgParseArgument::INTEGER, "INT"));
-  setMinValue(parser, "t", "1");
-  setMaxValue(parser, "t", "80");
-  addOption(parser, ArgParseOption("f", "hash_func", "Hash function to use for k-mers",
-				   ArgParseArgument::STRING, "STRING"));
-  setValidValues(parser, "f", "lookup3 spooky murmur city");
 
   //Parse command line.
-  ArgumentParser::ParseResult res = parse(parser, argc, argv);
+  parser.parse(argc,argv);
 
-  // If parsing was not successful then exit with code 1 if there were errors.
-  // Otherwise, exit with code 0 (e.g. help was printed).
+  if (!(parser.parsed_line())) {
+    std::cerr << "Line not parsed" << std::endl;
+    return 0;
+  }
+  //Ensure options only defined once
+  const char* one_time_opts[] = {"o", "k", "d", "i", "t", "f", "h"};
+  parser.check_one_time_options(one_time_opts);
 
-  if (res != ArgumentParser::PARSE_OK)
-    return res == ArgumentParser::PARSE_ERROR;
+  //Check only one of d and i options given
+  parser.check_incompatible_options("d", "i");
+
+  parser.check_option_arg_range("k", 3, 31);
+  parser.check_option_arg_range("t", 1, 80);
+
+  // check if the -h option was given on the command line
+  if (parser.option("h")) {
+    // display all the command line options
+    cout << "Usage: kmerge -o output_file -k k_start k_end (-d|-i|-t|-f)" << std::endl;
+    parser.print_options(); 
+    return 0;
+  }
+
+  // make sure two values input to k
+  if (parser.option("k").number_of_arguments() != 2) {
+    std::cout << "Error in command line:\n   You must specify start and end k-mer values for parsing" << std::endl;
+    std::cout << "\nTry the -h option for more information." << std::endl;
+    return 0;
+  }
+
+  // make sure one of the c or d options was given
+  if (!parser.option("o")) {
+    std::cout << "Error in command line:\n   You must specify an hdf5 output file" << std::endl;
+    std::cout << "\nTry the -h option for more information." << std::endl;
+    return 0;
+  }
+
 
   uint k_val_start = 0;
   uint k_val_end = 0;
-  std::string hdf5_filename, seq_dir("."), hash_func("lookup3");
+  std::string hdf5_filename, seq_dir("."), hash_func("lookup3"), in_file;
   uint num_threads = 1;
 
-  getArgumentValue(hdf5_filename, parser, 0);
-  getArgumentValue(k_val_start, parser, 1);
-  getArgumentValue(k_val_end, parser, 2);
-  if (isSet(parser, "d")) {
-    getOptionValue(seq_dir, parser, "d");
+  hdf5_filename = parser.option("o").argument();
+  k_val_start = atoi(parser.option("k").argument(0).c_str());
+  k_val_end = atoi(parser.option("k").argument(1).c_str());
+  if (parser.option("d")) {
+    seq_dir = parser.option("d").argument();
   }
-  if (isSet(parser, "t")) {
-    getOptionValue(num_threads, parser, "t");
+  if (parser.option("i")) {
+    in_file = parser.option("i").argument();
+  } 
+  if (parser.option("t")) {
+    num_threads = atoi(parser.option("t").argument().c_str());
   }
-  if (isSet(parser, "f")) {
-    getOptionValue(hash_func, parser, "f");
+  if (parser.option("f")) {
+    std::string option = parser.option("f").argument();
+    // check that values are valid or use default
+    if ((option == "lookup3") || (option == "spooky") || (option == "murmur") || (option == "city")) {
+      hash_func = option;
+    }
   }
   
   struct stat st;
@@ -79,7 +102,7 @@ int main(int argc, char const ** argv) {
   while ((dp = readdir(dirp)) != NULL) {
     if(stat(dp->d_name, &st) == 0) {
       if (S_ISDIR(st.st_mode)) {
-	string s_org(dp->d_name);
+	std::string s_org(dp->d_name);
 	if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
 	  try {
 	    param_struct params;

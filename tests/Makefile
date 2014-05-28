@@ -9,26 +9,22 @@ PROGRAM_SRC_DIR = $(HOME_DIR)/Development/kmerge/src
 # the compiler doesn't generate warnings in Google Test headers.
 CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR)
 
-CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/core/include
-CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
-
 #OPT = -O2
 
 # Flags passed to the C++ compiler.
 #CXXFLAGS += -g -DHAVE_CONFIG_H -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
-CXXFLAGS += -g -Wall -Wextra $(OPT) -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT -pthread
+CXXFLAGS += -g -Wall -Wextra $(OPT) -DDLIB_NO_GUI_SUPPORT -pthread
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
 TESTS = kmerge_unittest
 
 # using hdf5 tools for compiling
-CXX=/home/darryl/hdf5/bin/h5c++
-#CXX=g++
+CXX=g++
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -lsz -L $(HOME_DIR)/lib64 -larmadillo
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64
 
 # House-keeping build targets.
 

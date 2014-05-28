@@ -1,11 +1,9 @@
 SRC=/home/darryl/Development/kmerge/src
 HOME_DIR=/home/darryl
 DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
-CXX=/home/darryl/hdf5/bin/h5c++ 
-CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DSEQAN_HAS_ZLIB=1 -DDLIB_NO_GUI_SUPPORT
+CXX=g++
+CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
 
-CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/core/include
-CPPFLAGS+=-I /home/darryl/Development/seqan-trunk/extras/include
 CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR)
 
 LDFLAGS+=-lrt -lm -lz -lcityhash -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -L $(HOME_DIR)/lib -lsz

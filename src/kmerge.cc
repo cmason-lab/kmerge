@@ -3,17 +3,13 @@
 #include "MurmurHash3.h"
 #include "city.h"
 #include <dlib/serialize.h>
-#include <seqan/basic.h>
-#include <seqan/sequence.h>
-#include <seqan/file.h>
-#include <seqan/stream.h>
-#include <seqan/seq_io.h>
 #include <fstream>
 
-using namespace seqan;
 using namespace std;
 
 pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
 
@@ -40,9 +36,27 @@ KMerge::~KMerge() {
   delete this->hdf5_file;
 }
 
+std::string KMerge::rev_comp(const std::string& input) {
+  std::string output;
+
+  for (std::string::const_reverse_iterator rit=input.rbegin(); rit!=input.rend(); rit++) {
+    if (*rit == 'A') {
+      output.append("T");
+    } else if (*rit == 'T') {
+      output.append("A");
+    } else if (*rit == 'G') {
+      output.append("C");
+    } else if (*rit == 'C') {
+      output.append("G");
+    } else {
+      throw "Invalid character in input";
+    }
+  }
+
+  return output;
+}
 uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
-  string rc_kmer(kmer.c_str()), combine;
-  reverseComplement(rc_kmer);
+  std::string rc_kmer = KMerge::rev_comp(kmer), combine;
   if (kmer < rc_kmer) {
     combine = kmer + rc_kmer;
   } else {
@@ -109,32 +123,34 @@ bool KMerge::add_hash(std::map<uint, uint>& hashed_counts, uint kmer_hash_val) {
 }
 
 bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
+  int l;
+  kseq_t *seq;
+  gzFile fp;
 
-  seqan::SequenceStream seq_io(filename.c_str());
+  std::set<std::string> test;
 
-  seqan::CharString id;
-  seqan::Dna5String seq;
-  std::stringstream kmer;
-
-  while (!atEnd(seq_io)) {
-    if (readRecord(id, seq, seq_io) != 0) continue; 
-    if (length(seq) < k) continue;
-    for (int i = 0; i < length(seq) - k + 1; i++) {
-      seqan::Infix<seqan::Dna5String>::Type sub_seq(seq, i, i+k);
-
-      kmer.str("");
-      kmer << sub_seq;
-
-      if(kmer.str().find("N") != std::string::npos) { // skip kmers containing Ns
+  fp = gzopen(filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    if (seq_str.size() < k) continue;
+    for (uint i = 0; i < seq_str.size() - k + 1; i++) {
+      std::string kmer = seq_str.substr(i, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
         continue;
       }
-      if(!this->add_hash(hashed_counts, this->hash_kmer(kmer.str()))) { 
-	this->dlog << dlib::LERROR << "Unable to add hash: " << kmer.str();
-	return false;
+      test.insert(kmer);
+      if(!this->add_hash(hashed_counts, this->hash_kmer(kmer))) {
+        this->dlog << dlib::LERROR << "Unable to add hash: " << kmer;
+	kseq_destroy(seq);
+	gzclose(fp);
+        return false;
       }
     }
   }
-
+  kseq_destroy(seq);
+  gzclose(fp);
   return true;
 }
 
@@ -277,6 +293,7 @@ void KMerge::BuilderTask::execute() {
     params.kmerge->dlog << dlib::LINFO << "Finished de-serializing hashes for  " << params.group_name;
   } catch (dlib::serialization_error& e) {
     params.kmerge->dlog << dlib::LERROR << "Unable to deserialize hashes (" << params.group_name << ")";
+    pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
 
@@ -284,6 +301,7 @@ void KMerge::BuilderTask::execute() {
 
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
   std::vector<uint>().swap( hashes );
@@ -294,6 +312,7 @@ void KMerge::BuilderTask::execute() {
     params.kmerge->dlog << dlib::LINFO << "Finished de-serializing counts for  " << params.group_name;
   } catch (dlib::serialization_error& e) {
     params.kmerge->dlog << dlib::LERROR << "Unable to deserialize counts (" << params.group_name << ")";
+    pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
 
@@ -302,6 +321,7 @@ void KMerge::BuilderTask::execute() {
 
   if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
 
@@ -309,6 +329,7 @@ void KMerge::BuilderTask::execute() {
 
   if(!(params.kmerge->add_taxonomy(params.group_name))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
+    pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
 

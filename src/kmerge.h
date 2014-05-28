@@ -7,6 +7,10 @@
 #include "hdf5file.h"
 #include "SpookyV2.h"
 #include <dlib/logger.h> 
+#include "klib/kseq.h"
+#include <zlib.h>
+
+KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
 #define THROTTLE_KMER_LENGTH 19 //lock k-mer counting above this value to throttle memory allocation for longer k-mers
@@ -44,6 +48,7 @@ class KMerge {
  public:
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
+  static std::string rev_comp(const std::string&); 
   bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);

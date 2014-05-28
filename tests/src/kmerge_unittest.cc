@@ -10,46 +10,41 @@
 #include <dlib/threads.h>
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
-#include <seqan/basic.h>
-#include <seqan/seq_io.h>
-#include <seqan/sequence.h>
 
-using namespace seqan;
+TEST_CASE("CountHashedKmers", "[HashTest]") {
 
-
-TEST_CASE("CountHashedKmers", "[HashTest") {
-  int k = 5;
+  int k = 5, l;
   std::map<std::string, uint> kmer_counts, jf_counts;
-  seqan::SequenceStream seq_io("genome.test.fasta.gz");
-  REQUIRE(isGood(seq_io) == true);
-  // Read file record-wise.
-  seqan::CharString id;
-  seqan::Dna5String seq;
-  std::stringstream kmer;
-  while (!atEnd(seq_io)) {
-    REQUIRE(readRecord(id, seq, seq_io) == 0);
-    for (int i = 0; i < length(seq) - k + 1; i++) {
-      seqan::Infix<seqan::Dna5String>::Type sub_seq(seq, i, i+k);
-      
-      kmer.str("");
-      kmer << sub_seq;
+  kseq_t *seq;
+  gzFile fp;
 
-      if(kmer.str().find("N") != std::string::npos) { // skip kmers containing Ns
+  fp = gzopen("genome.test.fasta.gz", "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    for (int i = 0; i < seq->seq.l - k + 1; i++) {
+      std::string kmer = seq_str.substr(i, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
 	continue;
       }
-      if (kmer_counts.find(kmer.str()) != kmer_counts.end()) {
-	kmer_counts[kmer.str()]++;
+      if (kmer_counts.find(kmer) != kmer_counts.end()) {
+	kmer_counts[kmer]++;
       } else {
-	kmer_counts[kmer.str()] = 1;
+	kmer_counts[kmer] = 1;
       }
     }
   }
+  kseq_destroy(seq);
+  gzclose(fp);
 
+  REQUIRE(kmer_counts.size() == 424);
 
   // compare to jellyfish results
-  // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz                                            // ~/bin/jellyfish count -m 5 -o output -s 10000 <(zcat genome.test.contig.fa.gz)                                                  
-  // ~/bin/jellyfish dump -c output > genome.test.kmers.txt                                                                          
-
+  // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz
+  // ~/bin/jellyfish count -m 5 -o output -s 10000 <(zcat genome.test.contig.fa.gz)
+  // ~/bin/jellyfish dump -c output > genome.test.kmers.txt
+  
   ifstream in_file ("genome.test.kmers.txt");
 
   std::string seq2;
@@ -68,18 +63,11 @@ TEST_CASE("CountHashedKmers", "[HashTest") {
 }
 
 
-TEST_CASE("ReverseComplementTest", "[HashTest]") {
-  std::string test_seq("ACTAG");
-  std::string rc_test_seq(test_seq.c_str());
-  reverseComplement(rc_test_seq);
-  REQUIRE(rc_test_seq == "CTAGT");
-}
-
 TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") {
   std::string test_seq("ACTAG");
-  std::string rc_test_seq(test_seq.c_str());
-  reverseComplement(rc_test_seq);
+  std::string rc_test_seq = KMerge::rev_comp(test_seq);
   
+  REQUIRE(rc_test_seq == "CTAGT");
   KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
   
   uint hash1 = kmerge->hash_kmer(test_seq), hash2 = kmerge->hash_kmer(rc_test_seq);
@@ -242,6 +230,75 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   } catch (exception &e) {
     cout << e.what() << endl;
   } 
+}
+
+TEST_CASE("ProblemGenomeTest", "[HashTest]") {
+  param_struct params1, params2;
+
+  FQ::DataType type;
+  std::vector<uint64_t> dims;
+  std::string hash_dataset_name("kmer_hash"), counts_dataset_name("count");
+
+  params1.k_val_start = 3;
+  params1.k_val_end = 3;
+  params1.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
+  params1.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/57623.fasta.gz";
+  params1.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/hashes.bin";
+  params1.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/counts.bin";
+  params1.group_name = "/57623";
+  params1.hash_dataset_name =  "/57623/kmer_hash";
+  params1.counts_dataset_name = "/57623/count";
+
+ params2.k_val_start = 3;
+ params2.k_val_end = 3;
+ params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
+ params2.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/50385.fasta.gz";
+ params2.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/hashes.bin";
+ params2.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/counts.bin";
+ params2.group_name = "/50385";
+ params2.hash_dataset_name =  "/50385/kmer_hash";
+ params2.counts_dataset_name = "/50385/count";
+
+  dlib::thread_pool tp(2);
+
+  KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
+
+  params1.kmerge = kmerge;
+  params2.kmerge = kmerge;
+
+  KMerge::BuilderTask t1(params1);
+  KMerge::BuilderTask t2(params2);
+
+  tp.add_task(t1, &KMerge::BuilderTask::execute);
+  tp.add_task(t2, &KMerge::BuilderTask::execute);
+
+  tp.wait_for_all_tasks();
+
+  delete kmerge;
+
+  HDF5 *sample = new HDF5(params1.hdf5_filename);
+
+  if (!(sample->getVariableInfo(params1.hash_dataset_name, dims, &type))) {
+    cerr << "Cannot access sample variable information."  << endl;
+  }
+  
+  REQUIRE(dims[0] == 32);
+  dims.clear();
+
+  if (!(sample->getVariableInfo(params2.hash_dataset_name, dims, &type))) {
+    cerr << "Cannot access sample variable information."  << endl;
+  }
+
+  REQUIRE(dims[0] == 32);
+
+
+  delete sample;
+   
+
+  if (remove("/home/darryl/Development/kmerge/tests/problem.h5" ) != 0) {
+    perror( "Error deleting file");
+  }
+
 }
 
 
