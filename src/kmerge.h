@@ -34,6 +34,7 @@ struct param_struct {
   std::string group_name;
   std::string hash_dataset_name;
   std::string counts_dataset_name;
+  uint num_threads;
 } ;
 
 
@@ -72,5 +73,22 @@ class KMerge {
       ~BuilderTask() {
       }
   };
+
+  class CountAndHashSeq {
+  public:
+
+    param_struct& params;
+    std::map<uint, uint>& hashed_counts;
+    std::string seq;
+    pthread_mutex_t& m;
+
+
+    void operator() (long i) const;
+
+  CountAndHashSeq( param_struct& params_, std::map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_) {}
+
+    ~CountAndHashSeq() {}
+    };
+
 };
 

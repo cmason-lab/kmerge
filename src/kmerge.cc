@@ -140,7 +140,6 @@ bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, ui
       if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
         continue;
       }
-      test.insert(kmer);
       if(!this->add_hash(hashed_counts, this->hash_kmer(kmer))) {
         this->dlog << dlib::LERROR << "Unable to add hash: " << kmer;
 	kseq_destroy(seq);
@@ -343,4 +342,64 @@ void KMerge::BuilderTask::execute() {
   remove(params.tmp_counts_filename.c_str());
   return;
 
+}
+
+template<class InputIterT1, class InputIterT2, class OutputIterT, class Comparator, class Func>
+OutputIterT merge_apply(
+			InputIterT1 first1, InputIterT1 last1,
+			InputIterT2 first2, InputIterT2 last2,
+			OutputIterT result, Comparator comp, Func func) {
+  while (true)
+    {
+      if (first1 == last1) return std::copy(first2, last2, result);
+      if (first2 == last2) return std::copy(first1, last1, result);
+
+      if (comp(*first1, *first2) < 0) {
+	*result = *first1;
+	++first1;
+      } else if (comp(*first1, *first2) > 0) {
+	*result = *first2;
+	++first2;
+      } else { 
+	*result = func(*first1, *first2);
+	++first1;
+	++first2; 
+      }   
+      ++result;
+    }
+}
+
+template<class T>
+int compare_first(T a, T b) {
+  return a.first - b.first;
+}
+
+template<class T>
+T sum_pairs(T a, T b) {
+  return std::make_pair(a.first, a.second + b.second);
+}
+
+void KMerge::CountAndHashSeq::operator() (long i) const {
+    std::map<uint, uint> local_map, result;
+
+  uint k = 2*i - 1; // make sure k is converted to odd value from input index                                                                   
+  if(seq.size() < k) return;
+  for (uint j = 0; j < seq.size() - k + 1; j++) {
+    std::string kmer = seq.substr(j, k);
+    std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+    if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides                                          
+      continue;
+    }
+    if(!params.kmerge->add_hash(local_map, params.kmerge->hash_kmer(kmer))) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add hash: " << kmer;
+    }
+  }
+  params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes";
+  pthread_mutex_lock( &m );
+  merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()),
+	      compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
+  std::map<uint, uint>().swap(local_map);
+  result.swap(hashed_counts);
+  std::map<uint, uint>().swap(result);
+  pthread_mutex_unlock( &m );
 }

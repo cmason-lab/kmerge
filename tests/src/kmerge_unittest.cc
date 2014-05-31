@@ -10,6 +10,7 @@
 #include <dlib/threads.h>
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
+#include <dlib/misc_api.h>  // for dlib::sleep
 
 TEST_CASE("CountHashedKmers", "[HashTest]") {
 
@@ -62,6 +63,44 @@ TEST_CASE("CountHashedKmers", "[HashTest]") {
   REQUIRE(jf_counts.size() == kmer_counts.size());
 }
 
+TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
+
+  int l;
+  std::map<uint, uint> hashed_counts;
+  kseq_t *seq;
+  gzFile fp;
+  pthread_mutex_t mutex;
+  KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
+  param_struct params;
+
+  params.k_val_start = 3;
+  params.k_val_end = 11;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
+  params.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/208831.fasta.gz";
+  params.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/hashes.bin";
+  params.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/counts.bin";
+  params.group_name = "/208831";
+  params.hash_dataset_name =  "/208831/kmer_hash";
+  params.counts_dataset_name = "/208831/count";
+  params.kmerge = kmerge;
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+
+  pthread_mutex_init(&mutex, NULL);
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex);
+    dlib::parallel_for(params.num_threads, params.k_val_start - 1, params.k_val_end - params.k_val_start - 1, func);
+  }
+
+  delete kmerge;
+  pthread_mutex_destroy(&mutex);
+  REQUIRE(hashed_counts.size() == 1591922);
+  kseq_destroy(seq);
+  gzclose(fp);
+}
 
 TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") {
   std::string test_seq("ACTAG");
@@ -248,16 +287,18 @@ TEST_CASE("ProblemGenomeTest", "[HashTest]") {
   params1.group_name = "/57623";
   params1.hash_dataset_name =  "/57623/kmer_hash";
   params1.counts_dataset_name = "/57623/count";
+  params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
 
- params2.k_val_start = 3;
- params2.k_val_end = 3;
- params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
- params2.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/50385.fasta.gz";
- params2.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/hashes.bin";
- params2.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/counts.bin";
- params2.group_name = "/50385";
- params2.hash_dataset_name =  "/50385/kmer_hash";
- params2.counts_dataset_name = "/50385/count";
+  params2.k_val_start = 3;
+  params2.k_val_end = 3;
+  params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
+  params2.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/50385.fasta.gz";
+  params2.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/hashes.bin";
+  params2.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/counts.bin";
+  params2.group_name = "/50385";
+  params2.hash_dataset_name =  "/50385/kmer_hash";
+  params2.counts_dataset_name = "/50385/count";
+  params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
 
   dlib::thread_pool tp(2);
 
@@ -333,6 +374,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params1.group_name = "/208831";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
+  params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
+
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
   params2.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/209328/hashes.bin";
@@ -340,6 +383,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params2.group_name = "/209328";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
+  params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
   params3.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/54095/hashes.bin";
@@ -347,6 +391,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.group_name = "/54095";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";
+  params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
 
   uint thread_count = 3;
 
