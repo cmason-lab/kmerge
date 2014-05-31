@@ -122,32 +122,22 @@ bool KMerge::add_hash(std::map<uint, uint>& hashed_counts, uint kmer_hash_val) {
   return true;
 }
 
-bool KMerge::count_hashed_kmers(std::string& filename, uint k, std::map<uint, uint>& hashed_counts) {
+bool KMerge::count_hashed_kmers(param_struct& params, uint k, std::map<uint, uint>& hashed_counts) {
   int l;
   kseq_t *seq;
   gzFile fp;
+  pthread_mutex_t mutex;
 
-  std::set<std::string> test;
+  pthread_mutex_init(&mutex, NULL);
 
-  fp = gzopen(filename.c_str(), "r");
+  fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
-    if (seq_str.size() < k) continue;
-    for (uint i = 0; i < seq_str.size() - k + 1; i++) {
-      std::string kmer = seq_str.substr(i, k);
-      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
-      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
-        continue;
-      }
-      if(!this->add_hash(hashed_counts, this->hash_kmer(kmer))) {
-        this->dlog << dlib::LERROR << "Unable to add hash: " << kmer;
-	kseq_destroy(seq);
-	gzclose(fp);
-        return false;
-      }
-    }
+    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex);
+    dlib::parallel_for(params.num_threads, params.k_val_start - 1, params.k_val_end - params.k_val_start - 1, func);
   }
+  pthread_mutex_destroy(&mutex);
   kseq_destroy(seq);
   gzclose(fp);
   return true;
@@ -231,7 +221,7 @@ void KMerge::BuilderTask::execute() {
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   for (uint k = params.k_val_start; k <= params.k_val_end; k=k+2) {
     //if k = optimal k, also get raw k-mer sequence
-    if(!(params.kmerge->count_hashed_kmers(params.seq_filename, k, hashed_counts))) {
+    if(!(params.kmerge->count_hashed_kmers(params, k, hashed_counts))) {
       params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename << " for k=" << k;
       return;
     } else {
