@@ -92,7 +92,7 @@ TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
     KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex);
-    dlib::parallel_for(params.num_threads, params.k_val_start - 1, params.k_val_end - params.k_val_start - 1, func);
+    dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
   }
 
   delete kmerge;
@@ -175,22 +175,31 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   uint kmer2_pos = 0;
   uint pos = 0, last;
   FQ::DataType type;
-  const string sample_var_path("/org1");
   string sample_hash_dataset_name("kmer_hash"), sample_counts_dataset_name("count");
   uint *hashes_arr, *counts_arr;
 
-  const std::string HDF5_FILE_NAME( "/home/darryl/Development/kmerge/tests/parse_example.h5" );
-  const std::string HASH_DATASET_NAME( "/org1/kmer_hash" );
-  const std::string COUNT_DATASET_NAME( "/org1/count" );
   std::vector<uint64_t> dims;
-  uint k = 5;
-  std::string filename("genome.test.fasta.gz");
+  param_struct params;
 
+  params.k_val_start = 5;
+  params.k_val_end = 5;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/parse_example.h5";
+  params.seq_filename = "genome.test.fasta.gz";
+  params.tmp_hashes_filename = "hashes.bin";
+  params.tmp_counts_filename = "counts.bin";
+  params.group_name = "/org1";
+  params.hash_dataset_name =  "/org1/kmer_hash";
+  params.counts_dataset_name = "/org1/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+  params.seq_filename ="genome.test.fasta.gz";
+  
   try {
 
-    KMerge* kmerge = new KMerge(HDF5_FILE_NAME, "lookup3", ".");
+    KMerge* kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
+    params.kmerge = kmerge;
 
-    bool success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
+    bool success = kmerge->count_hashed_kmers(params, hashed_counts);
     REQUIRE(success == true);
 
     REQUIRE(hashed_counts.size() == 324);
@@ -223,27 +232,27 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     REQUIRE(counts[kmer2_pos] == kmer1_count + kmer2_count);
 
     
-    kmerge->add_dataset(HASH_DATASET_NAME, hashes.size(), &hashes[0], NULL);
-    kmerge->add_dataset(COUNT_DATASET_NAME, counts.size(), &counts[0], NULL);
+    kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL);
+    kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL);
     
     delete kmerge;
 
-    FastQuery *sample = new FastQuery(HDF5_FILE_NAME, FQ::FQ_HDF5);
+    FastQuery *sample = new FastQuery(params.hdf5_filename, FQ::FQ_HDF5);
 
-    if (!(sample->getVariableInfo(sample_hash_dataset_name, sample_hash_dataset_name, dims, &type, sample_var_path))) {
+    if (!(sample->getVariableInfo(sample_hash_dataset_name, sample_hash_dataset_name, dims, &type, params.group_name))) {
       cerr << "Cannot access sample variable information." << endl;
       exit(EXIT_FAILURE);
     }
     hashes_arr = new uint[dims[0]];
    
-    if (!(sample->getData("kmer_hash", hashes_arr, &sample_var_path[0]))) {
+    if (!(sample->getData("kmer_hash", hashes_arr, &params.group_name[0]))) {
       cerr << "Cannot access sample hashes" << endl;
       exit(EXIT_FAILURE);
     }
     
     counts_arr = new uint[dims[0]];
 
-    if(!(sample->getData("count", counts_arr, &sample_var_path[0]))) {
+    if(!(sample->getData("count", counts_arr, &params.group_name[0]))) {
       cerr << "Cannot access sample counts" << endl;
       exit(EXIT_FAILURE);
     }
@@ -262,7 +271,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete counts_arr;
     delete sample;
 
-    if (remove("/home/darryl/Development/kmerge/tests/parse_example.h5" ) != 0) {
+    if (remove(params.hdf5_filename.c_str()) != 0) {
       perror( "Error deleting file");
     }
 
@@ -272,7 +281,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 }
 
 TEST_CASE("ProblemGenomeTest", "[HashTest]") {
-  param_struct params1, params2;
+  param_struct params1, params2, params3;
 
   FQ::DataType type;
   std::vector<uint64_t> dims;
@@ -299,19 +308,33 @@ TEST_CASE("ProblemGenomeTest", "[HashTest]") {
   params2.hash_dataset_name =  "/50385/kmer_hash";
   params2.counts_dataset_name = "/50385/count";
   params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
-
-  dlib::thread_pool tp(2);
+  /*
+  params3.k_val_start = 3;
+  params3.k_val_end = 3;
+  params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
+  params3.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/202751.fasta.gz";
+  params3.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/hashes.bin";
+  params3.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/counts.bin";
+  params3.group_name = "/202751";
+  params3.hash_dataset_name =  "/202751/kmer_hash";
+  params3.counts_dataset_name = "/202751/count";
+  params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
+  */
+  dlib::thread_pool tp(3);
 
   KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
 
   params1.kmerge = kmerge;
   params2.kmerge = kmerge;
+  //params3.kmerge = kmerge;
 
   KMerge::BuilderTask t1(params1);
   KMerge::BuilderTask t2(params2);
+  //KMerge::BuilderTask t3(params3);
 
   tp.add_task(t1, &KMerge::BuilderTask::execute);
   tp.add_task(t2, &KMerge::BuilderTask::execute);
+  //tp.add_task(t3, &KMerge::BuilderTask::execute);
 
   tp.wait_for_all_tasks();
 
@@ -336,7 +359,7 @@ TEST_CASE("ProblemGenomeTest", "[HashTest]") {
   delete sample;
    
 
-  if (remove("/home/darryl/Development/kmerge/tests/problem.h5" ) != 0) {
+  if (remove( params1.hdf5_filename.c_str() ) != 0) {
     perror( "Error deleting file");
   }
 
@@ -613,7 +636,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete sample;
 
     
-    if (remove("/home/darryl/Development/kmerge/tests/thread_example.h5" ) != 0) {
+    if (remove( params1.hdf5_filename.c_str() ) != 0) {
       perror( "Error deleting file");
     }
   } catch (exception &e) {
@@ -623,14 +646,24 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 }
 
 TEST_CASE("TestHashingFunctions", "[HashTest]") {
-  std::string filename("genome.test.contig.fa.gz"), hdf5_filename("/home/darryl/Development/kmerge/tests/hash.h5");
-  KMerge* kmerge;
-  uint k=5;
   std::map<uint, uint> hashed_counts;
   std::map<uint, uint>::const_iterator m_iter;
+  
+  param_struct params;
 
-  kmerge = new KMerge(hdf5_filename, "lookup3", ".");
-  bool success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
+  params.k_val_start = 5;
+  params.k_val_end = 5;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/hash.h5";
+  params.seq_filename = "genome.test.fasta.gz";
+  params.tmp_hashes_filename = "hashes.bin";
+  params.tmp_counts_filename = "counts.bin";
+  params.group_name = "/org1";
+  params.hash_dataset_name =  "/org1/kmer_hash";
+  params.counts_dataset_name = "/org1/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+  params.kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
+  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -639,10 +672,10 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
     REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
   }
 
-  delete kmerge;
+  delete params.kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "spooky", ".");
-  success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
+  params.kmerge = new KMerge(params.hdf5_filename, "spooky", ".");
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -651,10 +684,10 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
     REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
   }
 
-  delete kmerge;
+  delete params.kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "city", ".");
-  success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
+  params.kmerge = new KMerge(params.hdf5_filename, "city", ".");
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -663,10 +696,10 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
     REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
   }
 
-  delete kmerge;
+  delete params.kmerge;
 
-  kmerge = new KMerge(hdf5_filename, "murmur", ".");
-  success = kmerge->count_hashed_kmers(filename, k, hashed_counts);
+  params.kmerge = new KMerge(params.hdf5_filename, "murmur", ".");
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -674,6 +707,8 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
     REQUIRE(m_iter->first >= 0);
     REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
   }
+
+  delete params.kmerge;
 
 
   if (remove("/home/darryl/Development/kmerge/tests/hash.h5" ) != 0) {

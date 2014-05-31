@@ -15,7 +15,7 @@ int main(int argc, char const ** argv) {
   parser.add_option("k", "Start and end k-mer values", 2);
   parser.add_option("d", "Location of sequences and taxonomy directories", 1);
   parser.add_option("i", "Location of single sequence file", 1);
-  parser.add_option("t", "Number of threads to use", 1);
+  parser.add_option("t", "Max number of threads to use", 1);
   parser.add_option("f", "Hash function to use for k-mers", 1);
   parser.add_option("h","Display this help message.");
 
@@ -40,22 +40,22 @@ int main(int argc, char const ** argv) {
   // check if the -h option was given on the command line
   if (parser.option("h")) {
     // display all the command line options
-    cout << "Usage: kmerge -o output_file -k k_start k_end (-d|-i|-t|-f)" << std::endl;
+    std::cout << "Usage: kmerge -o output_file -k k_start k_end (-d|-i|-t|-f)" << std::endl;
     parser.print_options(); 
     return 0;
   }
 
   // make sure two values input to k
   if (parser.option("k").number_of_arguments() != 2) {
-    std::cout << "Error in command line:\n   You must specify start and end k-mer values for parsing" << std::endl;
-    std::cout << "\nTry the -h option for more information." << std::endl;
+    std::cerr << "Error in command line:\n   You must specify start and end k-mer values for parsing" << std::endl;
+    std::cerr << "\nTry the -h option for more information." << std::endl;
     return 0;
   }
-
+ 
   // make sure one of the c or d options was given
   if (!parser.option("o")) {
-    std::cout << "Error in command line:\n   You must specify an hdf5 output file" << std::endl;
-    std::cout << "\nTry the -h option for more information." << std::endl;
+    std::cerr << "Error in command line:\n   You must specify an hdf5 output file" << std::endl;
+    std::cerr << "\nTry the -h option for more information." << std::endl;
     return 0;
   }
 
@@ -63,11 +63,17 @@ int main(int argc, char const ** argv) {
   uint k_val_start = 0;
   uint k_val_end = 0;
   std::string hdf5_filename, seq_dir("."), hash_func("lookup3"), in_file;
-  uint num_threads = 1;
+  uint num_threads = 1, max_threads = 0, parallel_for_threads = 1;
 
   hdf5_filename = parser.option("o").argument();
   k_val_start = atoi(parser.option("k").argument(0).c_str());
   k_val_end = atoi(parser.option("k").argument(1).c_str());
+
+  if ((k_val_start % 2 == 0) || (k_val_end % 2 == 0)) {
+    std::cerr << "Error in command line:\n   Start and end k-mer values must be odd" << std::endl;
+    std::cerr << "\nTry the -h option for more information." << std::endl;
+    return 0;
+  }
   if (parser.option("d")) {
     seq_dir = parser.option("d").argument();
   }
@@ -75,7 +81,16 @@ int main(int argc, char const ** argv) {
     in_file = parser.option("i").argument();
   } 
   if (parser.option("t")) {
-    num_threads = atoi(parser.option("t").argument().c_str());
+    max_threads = atoi(parser.option("t").argument().c_str());
+    uint num_ks = (k_val_end - k_val_start) / 2 + 1;
+    if (max_threads == 1) {
+      parallel_for_threads = 1;
+    } else if (max_threads <= num_ks) { //need 1 thread allocated for calling thread 
+      parallel_for_threads = max_threads - 1;
+    } else {
+      num_threads = max_threads / num_ks;
+      parallel_for_threads = num_ks;
+    }
   }
   if (parser.option("f")) {
     std::string option = parser.option("f").argument();
@@ -126,6 +141,7 @@ int main(int argc, char const ** argv) {
             tmp_counts_filename.str("");
             tmp_counts_filename << seq_dir << "/" << s_org << "/" << "counts.bin";
             params.tmp_counts_filename = tmp_counts_filename.str();
+	    params.num_threads = parallel_for_threads;
 	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
             tp.add_task(*task, &KMerge::BuilderTask::execute);
 	    task_ptrs.push_back(task);

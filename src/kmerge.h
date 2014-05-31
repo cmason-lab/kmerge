@@ -50,7 +50,7 @@ class KMerge {
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&); 
-  bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
+  bool count_hashed_kmers(param_struct&, std::map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
