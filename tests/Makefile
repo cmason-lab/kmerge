@@ -19,8 +19,7 @@ CXXFLAGS += -g -Wall -Wextra $(OPT) -DDLIB_NO_GUI_SUPPORT -pthread
 # created to the list.
 TESTS = kmerge_unittest
 
-# using hdf5 tools for compiling
-CXX=g++
+CXX=g++ -std=c++11
 
 # libraries to include
 

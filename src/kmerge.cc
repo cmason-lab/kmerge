@@ -113,7 +113,7 @@ bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_h
   return true;
 }
 
-bool KMerge::add_hash(std::map<uint, uint>& hashed_counts, uint kmer_hash_val) {
+bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_hash_val) {
   if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) {
     hashed_counts[kmer_hash_val] = 1; 
   } else {   
@@ -122,7 +122,7 @@ bool KMerge::add_hash(std::map<uint, uint>& hashed_counts, uint kmer_hash_val) {
   return true;
 }
 
-bool KMerge::count_hashed_kmers(param_struct& params, std::map<uint, uint>& hashed_counts) {
+bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
   int l;
   kseq_t *seq;
   gzFile fp;
@@ -197,6 +197,7 @@ bool KMerge::add_taxonomy(const std::string& group) {
   return true;
 }
 
+/*
 bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<uint>& counts) {
   std::map<uint, uint> sorter;
 
@@ -213,10 +214,11 @@ bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<
   }
   return true;
 }
+*/
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
-  std::map<uint, uint> hashed_counts;
+  btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts))) {
@@ -231,13 +233,15 @@ void KMerge::BuilderTask::execute() {
 
   std::vector<uint> hashes, counts;
 
-  for (map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     hashes.push_back(iter->first);
     counts.push_back(iter->second);
   }
 
+  
   // remove all elements from map as they are no longer needed
-  std::map<uint, uint>().swap( hashed_counts );
+  hashed_counts.clear();
+  btree::btree_map<uint, uint>().swap( hashed_counts );
 
   ofstream out_hashes_file(params.tmp_hashes_filename.c_str(), ios::out | ios::binary), 
     out_counts_file(params.tmp_counts_filename.c_str(), ios::out | ios::binary);
@@ -367,26 +371,27 @@ T sum_pairs(T a, T b) {
 }
 
 void KMerge::CountAndHashSeq::operator() (long i) const {
-    std::map<uint, uint> local_map, result;
+  btree::btree_map<uint, uint> local_map, result;
+  uint hash;
 
-  uint k = 2*i - 1; // make sure k is converted to odd value from input index                                                                   
+  uint k = 2*i - 1; // make sure k is converted to odd value from input index 
   if(seq.size() < k) return;
   for (uint j = 0; j < seq.size() - k + 1; j++) {
     std::string kmer = seq.substr(j, k);
     std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
-    if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides                                          
+    if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides            
       continue;
     }
-    if(!params.kmerge->add_hash(local_map, params.kmerge->hash_kmer(kmer))) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to add hash: " << kmer;
-    }
+    hash = params.kmerge->hash_kmer(kmer);
+    local_map[hash]++;
   }
   params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence in " << params.group_name << " (k = " << k << ")";
   pthread_mutex_lock( &m );
-  merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()),
-	      compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
-  std::map<uint, uint>().swap(local_map);
+  merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
+  local_map.clear();
+  btree::btree_map<uint, uint>().swap(local_map);
   result.swap(hashed_counts);
-  std::map<uint, uint>().swap(result);
+  result.clear();
+  btree::btree_map<uint, uint>().swap(result);
   pthread_mutex_unlock( &m );
 }

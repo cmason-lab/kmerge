@@ -9,6 +9,7 @@
 #include <dlib/logger.h> 
 #include "klib/kseq.h"
 #include <zlib.h>
+#include "cpp-btree/btree_map.h"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -50,14 +51,14 @@ class KMerge {
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&); 
-  bool count_hashed_kmers(param_struct&, std::map<uint, uint>&);
+  bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
-  bool add_hash(std::map<uint, uint>&, uint);
+  bool add_hash(btree::btree_map<uint, uint>&, uint);
   bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {
@@ -78,14 +79,14 @@ class KMerge {
   public:
 
     param_struct& params;
-    std::map<uint, uint>& hashed_counts;
+    btree::btree_map<uint, uint>& hashed_counts;
     std::string seq;
     pthread_mutex_t& m;
 
 
     void operator() (long i) const;
 
-  CountAndHashSeq( param_struct& params_, std::map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_) {}
+  CountAndHashSeq( param_struct& params_, btree::btree_map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_) {}
 
     ~CountAndHashSeq() {}
     };

@@ -10,7 +10,28 @@
 #include <dlib/threads.h>
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
-#include <dlib/misc_api.h>  // for dlib::sleep
+#include "cpp-btree/btree_map.h"
+
+TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
+  btree::btree_map<uint, uint> m;
+  uint prev = 0;
+
+  m[1] = 1;
+  m[4] = 4;
+  m[7] = 7;
+
+  REQUIRE(m.size() == 3);
+
+  REQUIRE(m[1] == 1);
+  REQUIRE(m[4] == 4);
+  REQUIRE(m[7] == 7);
+
+  for (btree::btree_map<uint, uint>::iterator m_iter = m.begin(); m_iter != m.end(); m_iter++) {
+    REQUIRE(m_iter->first > prev);
+    prev = m_iter->first;
+  }
+
+}
 
 TEST_CASE("CountHashedKmers", "[HashTest]") {
 
@@ -66,7 +87,7 @@ TEST_CASE("CountHashedKmers", "[HashTest]") {
 TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
 
   int l;
-  std::map<uint, uint> hashed_counts;
+  btree::btree_map<uint, uint> hashed_counts;
   kseq_t *seq;
   gzFile fp;
   pthread_mutex_t mutex;
@@ -166,7 +187,7 @@ TEST_CASE("SerializeAndDeserializeVectors", "[SerializeTest]") {
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
   std::vector<uint> counts;
-  std::map<uint, uint> hashed_counts;
+  btree::btree_map<uint, uint> hashed_counts;
   const string kmer1("AAAAA");
   const string kmer2("TTTTT");
   const uint kmer1_count = 84;
@@ -205,7 +226,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     REQUIRE(hashed_counts.size() == 324);
 
     //make sure hashes are sorted and store in vectors
-    for (std::map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
+    for (btree::btree_map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
       if (m_iter != hashed_counts.begin()) {
         REQUIRE(m_iter->first > last);
       }
@@ -646,8 +667,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 }
 
 TEST_CASE("TestHashingFunctions", "[HashTest]") {
-  std::map<uint, uint> hashed_counts;
-  std::map<uint, uint>::const_iterator m_iter;
+  btree::btree_map<uint, uint> hashed_counts;
+  btree::btree_map<uint, uint>::const_iterator m_iter;
   
   param_struct params;
 
