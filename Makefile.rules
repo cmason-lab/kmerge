@@ -16,10 +16,11 @@ kmerge: main.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) main.o kmerge.o murmur_hash.o spookyV2.o $(HOME_DIR)/include/dlib/all/source.cpp -o $@ $(LDFLAGS)
 
 main.o: kmerge.o $(SRC)/main.cc
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) kmerge.o -c $(SRC)/main.cc -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC)/main.cc -o $@ $(LDFLAGS)
 
 kmerge.o: spookyV2.o murmur_hash.o $(SRC)/kmerge.h $(SRC)/kmerge.cc
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) spookyV2.o murmur_hash.o -c $(SRC)/kmerge.cc -o $@ $(LDFLAGS)
+#	$(CXX) $(CPPFLAGS) $(CXXFLAGS) spookyV2.o murmur_hash.o -c $(SRC)/kmerge.cc -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC)/kmerge.cc -o $@ $(LDFLAGS)
 
 spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.cpp -o $@ $(LDFLAGS)

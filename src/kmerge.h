@@ -50,8 +50,9 @@ class KMerge {
  public:
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
-  static std::string rev_comp(const std::string&); 
-  bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&);
+  static std::string rev_comp(const std::string&);
+  void build(param_struct&);
+  bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
@@ -82,11 +83,12 @@ class KMerge {
     btree::btree_map<uint, uint>& hashed_counts;
     std::string seq;
     pthread_mutex_t& m;
+    bool print;
 
 
     void operator() (long i) const;
 
-  CountAndHashSeq( param_struct& params_, btree::btree_map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_) {}
+  CountAndHashSeq( param_struct& params_, btree::btree_map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_, bool print_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_), print(print_) {}
 
     ~CountAndHashSeq() {}
     };

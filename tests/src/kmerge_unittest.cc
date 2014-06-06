@@ -11,6 +11,8 @@
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
 #include "cpp-btree/btree_map.h"
+#include <iomanip>
+
 
 TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
   btree::btree_map<uint, uint> m;
@@ -33,7 +35,7 @@ TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
 
 }
 
-TEST_CASE("CountHashedKmers", "[HashTest]") {
+TEST_CASE("CountdKmersTest", "[HashTest]") {
 
   int k = 5, l;
   std::map<std::string, uint> kmer_counts, jf_counts;
@@ -84,6 +86,179 @@ TEST_CASE("CountHashedKmers", "[HashTest]") {
   REQUIRE(jf_counts.size() == kmer_counts.size());
 }
 
+TEST_CASE("CountKmersInFastqFile", "[HashTest]") {
+
+  int k = 7, l;
+  std::map<std::string, uint> kmer_counts, jf_counts;
+  kseq_t *seq;
+  gzFile fp;
+
+  fp = gzopen("sample/sample.fastq.gz", "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    for (int i = 0; i < seq->seq.l - k + 1; i++) {
+      std::string kmer = seq_str.substr(i, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
+	continue;
+      }
+      if (kmer_counts.find(kmer) != kmer_counts.end()) {
+	kmer_counts[kmer]++;
+      } else {
+	kmer_counts[kmer] = 1;
+      }
+    }
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 5 -o sample/sample.k5.txt sample/sample.fastq.gz
+
+  ifstream in_file ("sample/sample.k7.txt");
+
+  std::string seq2;
+  uint count;
+  if (in_file.is_open()) {
+    while ( !in_file.eof() ) {
+      in_file >> seq2 >> count;
+      if (seq2 != "") {
+	jf_counts[seq2] = count;
+	REQUIRE(kmer_counts[seq2] == count);
+      }
+    }
+    in_file.close();
+  }
+  REQUIRE(jf_counts.size() == kmer_counts.size());
+}
+
+TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
+  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts;
+  param_struct params;
+  std::vector<std::string> files;
+
+  params.k_val_start = 3;
+  params.k_val_end = 7;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/fasta.h5";
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
+  params.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/208831/hashes.bin";
+  params.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/208831/counts.bin";
+  params.group_name = "/208831";
+  params.hash_dataset_name =  "/208831/kmer_hash";
+  params.counts_dataset_name = "/208831/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;  
+
+
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastagz -k 3 -o 208831/sample.k3.txt 208831/208831.fasta.gz
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastagz -k 5 -o 208831/sample.k5.txt 208831/208831.fasta.gz
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastagz -k 7 -o 208831/sample.k7.txt 208831/208831.fasta.gz
+
+  files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k3.txt");
+  files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k5.txt");
+  files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k7.txt");
+
+  KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
+
+  params.kmerge = kmerge;
+
+
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
+  REQUIRE(success == true);
+  
+
+  std::string seq, last = "";
+  uint count;
+  for (std::string filename : files ) {
+    ifstream in_file (filename.c_str());
+    if (in_file.is_open()) {
+      while ( !in_file.eof() ) {
+	in_file >> seq >> count;
+	if (seq != last) {
+	  uint hash = kmerge->hash_kmer(seq);
+	  jf_hashed_counts[hash] = jf_hashed_counts[hash] +  count;
+	}
+	last = seq;
+      }
+      in_file.close();
+    }
+  }
+
+  delete kmerge;
+
+  REQUIRE(jf_hashed_counts.size() == hashed_counts.size());
+  
+  for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
+    REQUIRE(hashed_counts[b_it->first] == b_it->second);
+  }
+
+  if (remove(params.hdf5_filename.c_str()) != 0) {
+    perror( "Error deleting file");
+  }
+}
+
+TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
+  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts;
+  param_struct params;
+  std::vector<std::string> files;
+
+  params.k_val_start = 3;
+  params.k_val_end = 7;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/fastq.h5";
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
+  params.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/sample/hashes.bin";
+  params.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/sample/counts.bin";
+  params.group_name = "/sample";
+  params.hash_dataset_name =  "/sample/kmer_hash";
+  params.counts_dataset_name = "/sample/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;  
+
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 3 -o sample/sample.k3.txt sample/sample.fastq.gz
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 5 -o sample/sample.k5.txt sample/sample.fastq.gz
+  //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 7 -o sample/sample.k7.txt sample/sample.fastq.gz
+
+  files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k3.txt");
+  files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k5.txt");
+  files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k7.txt");
+
+  KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
+
+  params.kmerge = kmerge;
+
+
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, false);
+  REQUIRE(success == true);
+  
+
+  std::string seq, last = "";
+  uint count;
+  for (std::string filename : files ) {
+    ifstream in_file (filename.c_str());
+    if (in_file.is_open()) {
+      while ( !in_file.eof() ) {
+	in_file >> seq >> count;
+	if (seq != last) {
+	  uint hash = kmerge->hash_kmer(seq);
+	  jf_hashed_counts[hash] = jf_hashed_counts[hash] +  count;
+	}
+	last = seq;
+      }
+      in_file.close();
+    }
+  }
+
+  delete kmerge;
+
+  REQUIRE(jf_hashed_counts.size() == hashed_counts.size());
+  
+  for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
+    REQUIRE(hashed_counts[b_it->first] == b_it->second);
+  }
+
+  if (remove(params.hdf5_filename.c_str()) != 0) {
+    perror( "Error deleting file");
+  }
+}
+
 TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
 
   int l;
@@ -112,7 +287,7 @@ TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
-    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex);
+    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex, true);
     dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
   }
 
@@ -220,7 +395,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     KMerge* kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
     params.kmerge = kmerge;
 
-    bool success = kmerge->count_hashed_kmers(params, hashed_counts);
+    bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
     REQUIRE(success == true);
 
     REQUIRE(hashed_counts.size() == 324);
@@ -684,7 +859,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
   params.kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
-  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts);
+  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -696,7 +871,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "spooky", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -708,7 +883,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "city", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -720,7 +895,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "murmur", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {

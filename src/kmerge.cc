@@ -12,7 +12,6 @@ pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
-
   this->hdf5_file = new HDF5(filename, false);
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
@@ -122,7 +121,7 @@ bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_has
   return true;
 }
 
-bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
+bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uint>& hashed_counts, bool print = false) {
   int l;
   kseq_t *seq;
   gzFile fp;
@@ -134,7 +133,7 @@ bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uin
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
-    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex);
+    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex, print);
     dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
   }
   pthread_mutex_destroy(&mutex);
@@ -197,31 +196,69 @@ bool KMerge::add_taxonomy(const std::string& group) {
   return true;
 }
 
-/*
-bool KMerge::sort_kmer_hashes_and_counts(std::vector<uint>& hashes, std::vector<uint>& counts) {
-  std::map<uint, uint> sorter;
+void KMerge::build(param_struct& params) {
+  stringstream file_name, file_loc;
+  btree::btree_map<uint, uint> hashed_counts;
 
-  std::transform( hashes.begin(), hashes.end(), counts.begin(),
-		  std::inserter(sorter, sorter.end() ), std::make_pair<uint,int> );
-  
-  //clear hashes and counts and associated memory
-  std::vector<uint>().swap( hashes );
-  std::vector<uint>().swap( counts );
+  params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
+    return;
+  } else {
+    params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;
+    params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hashed_counts.size();  
+  }
 
-  for (std::map<uint, uint>::const_iterator iter = sorter.begin(); iter != sorter.end(); iter++) {
+  uint hash_count = hashed_counts.size();
+
+  std::vector<uint> hashes, counts;
+
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     hashes.push_back(iter->first);
     counts.push_back(iter->second);
   }
-  return true;
+
+  
+  // remove all elements from map as they are no longer needed
+  hashed_counts.clear();
+  btree::btree_map<uint, uint>().swap( hashed_counts );
+
+
+  std::vector<uint>().swap( hashes );
+  std::vector<uint>().swap( counts );
+
+
+  if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    pthread_mutex_unlock( &KMerge::mutex );
+    return;
+  }
+
+  if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    pthread_mutex_unlock( &KMerge::mutex );
+    return;
+  }
+
+
+  pthread_mutex_unlock( &KMerge::mutex );
+
+  params.kmerge->dlog << dlib::LINFO << hash_count << " k-mer hashes for " << params.group_name;
+
+  params.kmerge->dlog << dlib::LINFO << "Done (" << params.group_name  << ")";
+
+  return;
+
 }
-*/
+
+
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
   btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
@@ -385,7 +422,7 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
     hash = params.kmerge->hash_kmer(kmer);
     local_map[hash]++;
   }
-  params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence in " << params.group_name << " (k = " << k << ")";
+  if (print) params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence in " << params.group_name << " (k = " << k << ")";
   pthread_mutex_lock( &m );
   merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
   local_map.clear();

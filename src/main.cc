@@ -100,67 +100,89 @@ int main(int argc, char const ** argv) {
     }
   }
   
-  struct stat st;
-  DIR *dirp;
-  struct dirent *dp;
   stringstream seq_filename, file_loc, dataset_name, tmp_hashes_filename, tmp_counts_filename;
   vector<uint> hashes;
   vector<uint> counts;
   std::string group_name("");
   std::string hash_dataset_name("");
   std::string count_dataset_name("");
-  vector<KMerge::BuilderTask*> task_ptrs;
- 
-  dlib::thread_pool tp(num_threads);
-  dirp = opendir(seq_dir.c_str());
-  KMerge *kmerge = new KMerge(hdf5_filename, hash_func, seq_dir);
-  while ((dp = readdir(dirp)) != NULL) {
-    if(stat(dp->d_name, &st) == 0) {
-      if (S_ISDIR(st.st_mode)) {
-	std::string s_org(dp->d_name);
-	if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
-	  try {
-	    param_struct params;
-	    params.kmerge = kmerge;
-	    params.hdf5_filename = hdf5_filename;
-	    params.k_val_start = k_val_start;
-	    params.k_val_end = k_val_end;
-	    params.group_name = std::string("/") + s_org;
-	    seq_filename.str("");
-	    seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz";
-	    params.seq_filename = seq_filename.str();
-	    dataset_name.str("");
-	    dataset_name << "/" << s_org << "/" << "kmer_hash";
-	    params.hash_dataset_name = dataset_name.str();
-	    dataset_name.str("");
-	    dataset_name << "/" << s_org << "/" << "count";
-	    params.counts_dataset_name = dataset_name.str();
-	    tmp_hashes_filename.str("");
-	    tmp_hashes_filename << seq_dir << "/" << s_org << "/" << "hashes.bin";
-	    params.tmp_hashes_filename = tmp_hashes_filename.str();
-            tmp_counts_filename.str("");
-            tmp_counts_filename << seq_dir << "/" << s_org << "/" << "counts.bin";
-            params.tmp_counts_filename = tmp_counts_filename.str();
-	    params.num_threads = parallel_for_threads;
-	    KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
-            tp.add_task(*task, &KMerge::BuilderTask::execute);
-	    task_ptrs.push_back(task);
-	  } catch( exception &e ) {
-	    cout << e.what() << std::endl;
-	    return 1;
+
+  KMerge *kmerge;
+
+  if (parser.option("i")) {
+    kmerge = new KMerge(hdf5_filename, hash_func, "");
+    param_struct params;
+    params.kmerge = kmerge;
+    params.hdf5_filename = "sample.h5";
+    params.k_val_start = k_val_start;
+    params.k_val_end = k_val_end;
+    params.group_name = "/sample";
+    seq_filename.str("");
+    params.seq_filename = in_file;
+    dataset_name.str("");
+    params.hash_dataset_name = "/sample/kmer_hash";
+    params.counts_dataset_name = "/sample/count";
+    params.tmp_hashes_filename = ""; 
+    params.tmp_counts_filename = "";
+    params.num_threads = parallel_for_threads;
+    kmerge->build(params);
+  } else {
+    struct stat st;
+    DIR *dirp;
+    struct dirent *dp;
+    vector<KMerge::BuilderTask*> task_ptrs;
+    dlib::thread_pool tp(num_threads);
+    dirp = opendir(seq_dir.c_str());
+    kmerge = new KMerge(hdf5_filename, hash_func, seq_dir);
+    while ((dp = readdir(dirp)) != NULL) {
+      if(stat(dp->d_name, &st) == 0) {
+	if (S_ISDIR(st.st_mode)) {
+	  std::string s_org(dp->d_name);
+	  if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
+	    try {
+	      param_struct params;
+	      params.kmerge = kmerge;
+	      params.hdf5_filename = hdf5_filename;
+	      params.k_val_start = k_val_start;
+	      params.k_val_end = k_val_end;
+	      params.group_name = std::string("/") + s_org;
+	      seq_filename.str("");
+	      seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz";
+	      params.seq_filename = seq_filename.str();
+	      dataset_name.str("");
+	      dataset_name << "/" << s_org << "/" << "kmer_hash";
+	      params.hash_dataset_name = dataset_name.str();
+	      dataset_name.str("");
+	      dataset_name << "/" << s_org << "/" << "count";
+	      params.counts_dataset_name = dataset_name.str();
+	      tmp_hashes_filename.str("");
+	      tmp_hashes_filename << seq_dir << "/" << s_org << "/" << "hashes.bin";
+	      params.tmp_hashes_filename = tmp_hashes_filename.str();
+	      tmp_counts_filename.str("");
+	      tmp_counts_filename << seq_dir << "/" << s_org << "/" << "counts.bin";
+	      params.tmp_counts_filename = tmp_counts_filename.str();
+	      params.num_threads = parallel_for_threads;
+	      KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
+	      tp.add_task(*task, &KMerge::BuilderTask::execute);
+	      task_ptrs.push_back(task);
+	    } catch( exception &e ) {
+	      cout << e.what() << std::endl;
+	      return 1;
+	    }
 	  }
 	}
       }
     }
-  }
-  tp.wait_for_all_tasks();
-  for (vector<KMerge::BuilderTask*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
-    delete *iter;
+
+    tp.wait_for_all_tasks();
+    for (vector<KMerge::BuilderTask*>::iterator iter=task_ptrs.begin(); iter!=task_ptrs.end(); iter++) {
+      delete *iter;
+    }
+    (void)closedir(dirp);
   }
 
   delete kmerge;
   
-  (void)closedir(dirp);
 
   return 0;
 }
