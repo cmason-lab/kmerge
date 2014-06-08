@@ -121,7 +121,7 @@ bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_has
   return true;
 }
 
-bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uint>& hashed_counts, bool print = false) {
+bool KMerge::count_hashed_kmers_fasta(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
   int l;
   kseq_t *seq;
   gzFile fp;
@@ -133,12 +133,23 @@ bool KMerge::count_hashed_kmers(param_struct& params, btree::btree_map<uint, uin
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
-    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex, print);
+    KMerge::CountAndHashSeqFasta func(params, hashed_counts, seq_str, mutex);
     dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
   }
   pthread_mutex_destroy(&mutex);
   kseq_destroy(seq);
   gzclose(fp);
+  return true;
+}
+
+bool KMerge::count_hashed_kmers_fastq(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
+  pthread_mutex_t mutex;
+
+  pthread_mutex_init(&mutex, NULL);
+  KMerge::CountAndHashSeqFastq func(params, hashed_counts, mutex);
+  dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
+  pthread_mutex_destroy(&mutex);
+
   return true;
 }
 
@@ -201,7 +212,7 @@ void KMerge::build(param_struct& params) {
   btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
+  if(!(params.kmerge->count_hashed_kmers_fastq(params, hashed_counts))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
@@ -258,7 +269,7 @@ void KMerge::BuilderTask::execute() {
   btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
+  if(!(params.kmerge->count_hashed_kmers_fasta(params, hashed_counts))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
@@ -407,7 +418,7 @@ T sum_pairs(T a, T b) {
   return std::make_pair(a.first, a.second + b.second);
 }
 
-void KMerge::CountAndHashSeq::operator() (long i) const {
+void KMerge::CountAndHashSeqFasta::operator() (long i) const {
   btree::btree_map<uint, uint> local_map, result;
   uint hash;
 
@@ -422,7 +433,46 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
     hash = params.kmerge->hash_kmer(kmer);
     local_map[hash]++;
   }
-  if (print) params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence in " << params.group_name << " (k = " << k << ")";
+  params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence in " << params.group_name << " (k = " << k << ")";
+  pthread_mutex_lock( &m );
+  merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
+  local_map.clear();
+  btree::btree_map<uint, uint>().swap(local_map);
+  result.swap(hashed_counts);
+  result.clear();
+  btree::btree_map<uint, uint>().swap(result);
+  pthread_mutex_unlock( &m );
+}
+
+void KMerge::CountAndHashSeqFastq::operator() (long i) const {
+  btree::btree_map<uint, uint> local_map, result;
+  int l;
+  uint hash;
+  kseq_t *seq;
+  gzFile fp;
+  uint k = 2*i - 1; // make sure k is converted to odd value from input index 
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    if (seq->seq.l < k) return;
+    std::string seq_str(seq->seq.s);
+    for (int i = 0; i < seq->seq.l - k + 1; i++) {
+      std::string kmer = seq_str.substr(i, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
+        continue;
+      }
+      hash = params.kmerge->hash_kmer(kmer);
+      local_map[hash]++;
+    }
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
+
+  params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequences in " << params.group_name << " (k = " << k << ")";
+
   pthread_mutex_lock( &m );
   merge_apply(hashed_counts.begin(), hashed_counts.end(), local_map.begin(), local_map.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
   local_map.clear();

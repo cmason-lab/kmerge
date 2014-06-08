@@ -162,7 +162,7 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   params.kmerge = kmerge;
 
 
-  bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
+  bool success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
   REQUIRE(success == true);
   
 
@@ -225,7 +225,7 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   params.kmerge = kmerge;
 
 
-  bool success = kmerge->count_hashed_kmers(params, hashed_counts, false);
+  bool success = kmerge->count_hashed_kmers_fastq(params, hashed_counts);
   REQUIRE(success == true);
   
 
@@ -249,7 +249,7 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   delete kmerge;
 
   REQUIRE(jf_hashed_counts.size() == hashed_counts.size());
-  
+
   for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
     REQUIRE(hashed_counts[b_it->first] == b_it->second);
   }
@@ -259,7 +259,40 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   }
 }
 
-TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
+TEST_CASE("CountHashedKmersParallelFastq", "[HashTest]") {
+
+  int l;
+  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts;
+  pthread_mutex_t mutex;
+  KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
+  param_struct params;
+  std::vector<std::string> files;
+
+  params.k_val_start = 3;
+  params.k_val_end = 7;
+  params.hdf5_filename = "";
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
+  params.tmp_hashes_filename = "";
+  params.tmp_counts_filename = "";
+  params.group_name = "/sample";
+  params.hash_dataset_name =  "/sample/kmer_hash";
+  params.counts_dataset_name = "/sample/count";
+  params.kmerge = kmerge;
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+
+  pthread_mutex_init(&mutex, NULL);
+  KMerge::CountAndHashSeqFastq func(params, hashed_counts, mutex);
+  dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
+
+  pthread_mutex_destroy(&mutex);
+  REQUIRE(hashed_counts.size() == 8727);
+
+  delete kmerge;
+}
+
+
+TEST_CASE("CountHashedKmersParallelFasta", "[HashTest]") {
 
   int l;
   btree::btree_map<uint, uint> hashed_counts;
@@ -287,7 +320,7 @@ TEST_CASE("CountHashedKmersParallel", "[HashTest]") {
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
     std::string seq_str(seq->seq.s);
-    KMerge::CountAndHashSeq func(params, hashed_counts, seq_str, mutex, true);
+    KMerge::CountAndHashSeqFasta func(params, hashed_counts, seq_str, mutex);
     dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
   }
 
@@ -395,7 +428,7 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     KMerge* kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
     params.kmerge = kmerge;
 
-    bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
+    bool success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
     REQUIRE(success == true);
 
     REQUIRE(hashed_counts.size() == 324);
@@ -859,7 +892,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
   params.kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
-  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  bool success = params.kmerge->count_hashed_kmers_fasta(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -871,7 +904,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "spooky", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  success = params.kmerge->count_hashed_kmers_fasta(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -883,7 +916,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "city", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  success = params.kmerge->count_hashed_kmers_fasta(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -895,7 +928,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "murmur", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  success = params.kmerge->count_hashed_kmers_fasta(params, hashed_counts);
   REQUIRE(success == true);
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
