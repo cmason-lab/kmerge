@@ -113,7 +113,7 @@ int main(int argc, char const ** argv) {
     kmerge = new KMerge(hdf5_filename, hash_func, "");
     param_struct params;
     params.kmerge = kmerge;
-    params.hdf5_filename = "sample.h5";
+    params.hdf5_filename = hdf5_filename;
     params.k_val_start = k_val_start;
     params.k_val_end = k_val_end;
     params.group_name = "/sample";

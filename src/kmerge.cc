@@ -235,10 +235,6 @@ void KMerge::build(param_struct& params) {
   btree::btree_map<uint, uint>().swap( hashed_counts );
 
 
-  std::vector<uint>().swap( hashes );
-  std::vector<uint>().swap( counts );
-
-
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
     pthread_mutex_unlock( &KMerge::mutex );
@@ -257,6 +253,9 @@ void KMerge::build(param_struct& params) {
   params.kmerge->dlog << dlib::LINFO << hash_count << " k-mer hashes for " << params.group_name;
 
   params.kmerge->dlog << dlib::LINFO << "Done (" << params.group_name  << ")";
+
+  std::vector<uint>().swap( hashes );
+  std::vector<uint>().swap( counts );
 
   return;
 

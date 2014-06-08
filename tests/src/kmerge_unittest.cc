@@ -537,33 +537,19 @@ TEST_CASE("ProblemGenomeTest", "[HashTest]") {
   params2.hash_dataset_name =  "/50385/kmer_hash";
   params2.counts_dataset_name = "/50385/count";
   params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
-  /*
-  params3.k_val_start = 3;
-  params3.k_val_end = 3;
-  params3.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
-  params3.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/202751.fasta.gz";
-  params3.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/hashes.bin";
-  params3.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/202751/counts.bin";
-  params3.group_name = "/202751";
-  params3.hash_dataset_name =  "/202751/kmer_hash";
-  params3.counts_dataset_name = "/202751/count";
-  params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
-  */
+
   dlib::thread_pool tp(3);
 
   KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
 
   params1.kmerge = kmerge;
   params2.kmerge = kmerge;
-  //params3.kmerge = kmerge;
 
   KMerge::BuilderTask t1(params1);
   KMerge::BuilderTask t2(params2);
-  //KMerge::BuilderTask t3(params3);
 
   tp.add_task(t1, &KMerge::BuilderTask::execute);
   tp.add_task(t2, &KMerge::BuilderTask::execute);
-  //tp.add_task(t3, &KMerge::BuilderTask::execute);
 
   tp.wait_for_all_tasks();
 
@@ -594,6 +580,63 @@ TEST_CASE("ProblemGenomeTest", "[HashTest]") {
 
 }
 
+TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
+  param_struct params;
+  FQ::DataType type;
+  std::vector<uint64_t> dims;
+
+  params.k_val_start = 3;
+  params.k_val_end = 7;
+  params.hdf5_filename = "/home/darryl/Development/kmerge/tests/thread_fastq.h5";
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
+  params.tmp_hashes_filename = "";
+  params.tmp_counts_filename = "";
+  params.group_name = "/sample";
+  params.hash_dataset_name =  "/sample/kmer_hash";
+  params.counts_dataset_name = "/sample/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+  KMerge *kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
+
+  params.kmerge = kmerge;
+
+  kmerge->build(params);
+
+  delete kmerge;
+
+  HDF5 *sample = new HDF5(params.hdf5_filename);
+
+  if (!(sample->getVariableInfo(params.hash_dataset_name, dims, &type))) {
+    cerr << "Cannot access sample variable information."  << endl;
+  }
+  
+  REQUIRE(dims[0] == 8727);
+
+  uint *hashes_arr = new uint[dims[0]];
+   
+  if (!(sample->getData(params.hash_dataset_name, hashes_arr))) {
+    cerr << "Cannot access sample hashes" << endl;
+    exit(EXIT_FAILURE);
+  }
+  
+  uint *counts_arr = new uint[dims[0]];
+  
+  if(!(sample->getData(params.counts_dataset_name, counts_arr))) {
+    cerr << "Cannot access sample counts" << endl;
+    exit(EXIT_FAILURE);
+  }
+
+  dims.clear();
+
+  delete [] counts_arr;
+  delete [] hashes_arr;
+  delete sample;
+   
+
+  if (remove( params.hdf5_filename.c_str() ) != 0) {
+    perror( "Error deleting file");
+  }
+}
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes, counts;
