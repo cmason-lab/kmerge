@@ -128,7 +128,6 @@ bool KMerge::count_hashed_kmers_fasta(param_struct& params, btree::btree_map<uin
   pthread_mutex_t mutex;
 
   pthread_mutex_init(&mutex, NULL);
-
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {

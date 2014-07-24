@@ -3,7 +3,6 @@
 #include <limits.h>
 #include "kmerge.h"
 #include <math.h>
-#include "fq.h"
 #include "hdf5file.h"
 #include "catch.hpp"
 #include <sstream>
@@ -12,7 +11,102 @@
 #include <dlib/logger.h>
 #include "cpp-btree/btree_map.h"
 #include <iomanip>
+#include "indexBuilder.h"
+#include "queryProcessor.h"
 
+TEST_CASE("StoreKmerHashesAsFastBitIndices", "[FastBitTest]") {
+  uint hash;
+  std::stringstream path;
+  btree::btree_map<uint, uint> hashed_counts;
+  param_struct params;
+
+  params.k_val_start = 5;
+  params.k_val_end = 5;
+  params.hdf5_filename = "index_data.h5";
+  params.seq_filename = "genome.test.fasta.gz";
+  params.tmp_hashes_filename = "";
+  params.tmp_counts_filename = "";
+  params.group_name = "/test";
+  params.hash_dataset_name =  "/test/kmer_hash";
+  params.counts_dataset_name = "/test/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+ 
+  // build sample kmerge file
+
+  KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
+  params.kmerge = kmerge;
+  bool success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
+  REQUIRE(success == true);
+
+  REQUIRE(hashed_counts.size() == 324);
+
+  std::vector<uint> hashes, counts;
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    hashes.push_back(iter->first);                                                                
+    counts.push_back(iter->second);
+  }
+
+  REQUIRE(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL) == true);
+  REQUIRE(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL) == true);
+
+  delete kmerge;
+ 
+  // add indices to file
+  IndexBuilder* index_builder = new IndexBuilder("index_data.h5", FQ::FQ_HDF5, "index_data.h5");
+  index_builder->buildIndexes(0, "kmer_hash");
+  delete index_builder;
+
+  // search for data
+  QueryProcessor* query_processor = new QueryProcessor("index_data.h5", FQ::FQ_HDF5);
+
+  // test that search does not return incorrect values
+  std::vector<double> np_ids;
+  np_ids.push_back(10);
+  std::vector<uint64_t> coords;
+  uint hits = query_processor->executeEqualitySelectionQuery("kmer_hash", np_ids, coords, "/test");
+  REQUIRE(hits == 0);
+  REQUIRE(coords.size() == 0);
+
+  //find coordinates of values of interest
+  uint hashes_arr[] = {1022408118, 1043881921, 1045475391, 1049435108, 1130773752};
+  std::vector<double> ids(hashes_arr, hashes_arr + 5);
+  std::vector<uint> hashes_ref(hashes_arr, hashes_arr + 5);
+  uint counts_arr[] = {1, 1, 1, 4, 97};
+  std::vector<uint> freq(counts_arr, counts_arr + 5);
+
+  ids.push_back(1); // count = 0
+  ids.push_back(10); // count = 0
+
+  hits = query_processor->executeEqualitySelectionQuery("kmer_hash", ids, coords, "/test");
+  REQUIRE(hits == 5);
+  REQUIRE(ids.size() != coords.size());
+  REQUIRE(coords.size() == 5);
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+
+  uint* h_result = new uint[coords.size()]; 
+  uint* c_result = new uint[coords.size()];
+  query_processor->getSelectedData("kmer_hash", coords, h_result, "/test");
+  query_processor->getSelectedData("count", coords, c_result, "/test");
+
+  delete query_processor;
+  
+  for(uint i = 0; i < coords.size(); i++) {
+    std::vector<uint>::iterator iter = std::find (hashes_ref.begin(), hashes_ref.end(), h_result[i]);
+    REQUIRE(iter != hashes_ref.end());
+    uint pos = iter - hashes_ref.begin();
+    REQUIRE(freq[pos] == c_result[i]);
+  }
+  
+  delete [] h_result;
+  delete [] c_result;
+
+
+  if (remove("/home/darryl/Development/kmerge/tests/index_data.h5") != 0) {
+    perror( "Error deleting file");
+  }
+ 
+}
 
 TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
   btree::btree_map<uint, uint> m;
@@ -35,7 +129,7 @@ TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
 
 }
 
-TEST_CASE("CountdKmersTest", "[HashTest]") {
+TEST_CASE("CountKmersTest", "[HashTest]") {
 
   int k = 5, l;
   std::map<std::string, uint> kmer_counts, jf_counts;
@@ -63,6 +157,7 @@ TEST_CASE("CountdKmersTest", "[HashTest]") {
   gzclose(fp);
 
   REQUIRE(kmer_counts.size() == 424);
+
 
   // compare to jellyfish results
   // perl ../scripts/contiguous_fasta.pl <(zcat genome.test.fa.gz) | ~/bin/fastx_toolkit/bin/fasta_formatter -w 80 | gzip > genome.test.contig.fa.gz
@@ -331,6 +426,7 @@ TEST_CASE("CountHashedKmersParallelFasta", "[HashTest]") {
   gzclose(fp);
 }
 
+
 TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") {
   std::string test_seq("ACTAG");
   std::string rc_test_seq = KMerge::rev_comp(test_seq);
@@ -508,6 +604,8 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     cout << e.what() << endl;
   } 
 }
+
+
 
 TEST_CASE("ProblemGenomeTest", "[HashTest]") {
   param_struct params1, params2, params3;
