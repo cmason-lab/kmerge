@@ -46,6 +46,7 @@ class KMerge {
   std::string dir;
   static pthread_mutex_t mutex;
   dlib::logger dlog;
+  std::string filename;
 
  public:
   KMerge(const std::string&, const std::string&, const std::string&);

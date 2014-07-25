@@ -4,6 +4,7 @@
 #include "city.h"
 #include <dlib/serialize.h>
 #include <fstream>
+#include "indexBuilder.h"
 
 using namespace std;
 
@@ -12,7 +13,8 @@ pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
-  this->hdf5_file = new HDF5(filename, false);
+  this->filename = filename;
+  this->hdf5_file = new HDF5(this->filename, false);
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
 
@@ -33,6 +35,10 @@ KMerge::KMerge (const std::string& filename, const std::string& hash_func, const
 
 KMerge::~KMerge() {
   delete this->hdf5_file;
+  // index data
+  IndexBuilder* index_builder = new IndexBuilder(this->filename, FQ::FQ_HDF5, this->filename);
+  index_builder->buildIndexes(0, "kmer_hash");
+  delete index_builder;
 }
 
 std::string KMerge::rev_comp(const std::string& input) {
