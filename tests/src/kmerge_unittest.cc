@@ -108,6 +108,110 @@ TEST_CASE("StoreKmerHashesAsFastBitIndices", "[FastBitTest]") {
  
 }
 
+TEST_CASE("IndicesAreUsableFromMergedHDF5File", "[FastBitTest]") {
+  uint hits;
+  std::vector<uint64_t> coords;
+  // search for data
+  QueryProcessor* query_processor = new QueryProcessor("reference.u.h5", FQ::FQ_HDF5);
+
+
+  //find coordinates of values of interest
+  uint hashes_arr[] = {313855374, 883124211, 1275167949, 164111441, 291025028, 313855374, 2149088619, 1700750264, 2469142716, 2837084308};
+  std::vector<double> ids(hashes_arr, hashes_arr + 10);
+  std::vector<uint> hashes_ref(hashes_arr, hashes_arr + 10);
+  uint counts1[] = {41872, 30947, 23680};
+  std::vector<uint> freq1(counts1, counts1 + 3);
+
+  hits = query_processor->executeEqualitySelectionQuery("kmer_hash", ids, coords, "/1");
+  REQUIRE(hits == 3);
+  REQUIRE(ids.size() != coords.size());
+  REQUIRE(coords.size() == 3);
+
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+
+  uint* h_result = new uint[coords.size()]; 
+  uint* c_result = new uint[coords.size()];
+  query_processor->getSelectedData("kmer_hash", coords, h_result, "/1");
+  query_processor->getSelectedData("count", coords, c_result, "/1");
+  
+  for(uint i = 0; i < coords.size(); i++) {
+    std::vector<uint>::iterator iter = std::find (hashes_ref.begin(), hashes_ref.end(), h_result[i]);
+    REQUIRE(iter != hashes_ref.end());
+    iter = std::find(freq1.begin(), freq1.end(), c_result[i]);
+    REQUIRE(iter != freq1.end());
+  }
+
+  coords.clear();
+  REQUIRE(coords.size() == 0);
+  
+  delete [] h_result;
+  delete [] c_result;
+
+
+  uint counts2[] = {44677, 36661, 41872, 30213, 22141};
+  std::vector<uint> freq2(counts2, counts2 + 5);
+
+  hits = query_processor->executeEqualitySelectionQuery("kmer_hash", ids, coords, "/2");
+  REQUIRE(hits == 5);
+  REQUIRE(ids.size() != coords.size());
+  REQUIRE(coords.size() == 5);
+
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+
+  h_result = new uint[coords.size()]; 
+  c_result = new uint[coords.size()];
+  query_processor->getSelectedData("kmer_hash", coords, h_result, "/2");
+  query_processor->getSelectedData("count", coords, c_result, "/2");
+  
+  for(uint i = 0; i < coords.size(); i++) {
+    std::vector<uint>::iterator iter = std::find (hashes_ref.begin(), hashes_ref.end(), h_result[i]);
+    REQUIRE(iter != hashes_ref.end());
+    iter = std::find(freq2.begin(), freq2.end(), c_result[i]);
+    REQUIRE(iter != freq2.end());
+  }
+
+  coords.clear();
+  REQUIRE(coords.size() == 0);
+  
+  delete [] h_result;
+  delete [] c_result;
+
+
+  uint counts3[] = {44677, 36661, 30143, 30213, 13127, 22141};
+  std::vector<uint> freq3(counts3, counts3 + 6);
+
+  hits = query_processor->executeEqualitySelectionQuery("kmer_hash", ids, coords, "/3");
+  REQUIRE(hits == 6);
+  REQUIRE(ids.size() != coords.size());
+  REQUIRE(coords.size() == 6);
+
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+
+  h_result = new uint[coords.size()]; 
+  c_result = new uint[coords.size()];
+  query_processor->getSelectedData("kmer_hash", coords, h_result, "/3");
+  query_processor->getSelectedData("count", coords, c_result, "/3");
+  
+  for(uint i = 0; i < coords.size(); i++) {
+    std::vector<uint>::iterator iter = std::find (hashes_ref.begin(), hashes_ref.end(), h_result[i]);
+    REQUIRE(iter != hashes_ref.end());
+    iter = std::find(freq3.begin(), freq3.end(), c_result[i]);
+    REQUIRE(iter != freq3.end());
+  }
+
+  coords.clear();
+  REQUIRE(coords.size() == 0);
+  
+  delete [] h_result;
+  delete [] c_result;
+
+
+  delete query_processor;
+}
+
 TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
   btree::btree_map<uint, uint> m;
   uint prev = 0;
