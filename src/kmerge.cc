@@ -4,7 +4,6 @@
 #include "city.h"
 #include <dlib/serialize.h>
 #include <fstream>
-#include "indexBuilder.h"
 
 using namespace std;
 
@@ -35,10 +34,6 @@ KMerge::KMerge (const std::string& filename, const std::string& hash_func, const
 
 KMerge::~KMerge() {
   delete this->hdf5_file;
-  // index data
-  IndexBuilder* index_builder = new IndexBuilder(this->filename, FQ::FQ_HDF5, this->filename);
-  index_builder->buildIndexes(0, "kmer_hash");
-  delete index_builder;
 }
 
 std::string KMerge::rev_comp(const std::string& input) {
@@ -208,6 +203,8 @@ bool KMerge::add_taxonomy(const std::string& group) {
       return false;
     }
   }
+  
+  in_file.close();
 
   return true;
 }
@@ -283,18 +280,24 @@ void KMerge::BuilderTask::execute() {
 
   uint hash_count = hashed_counts.size();
 
-  std::vector<uint> hashes, counts;
+  /*std::vector<uint> hashes, counts;
 
   for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     hashes.push_back(iter->first);
     counts.push_back(iter->second);
   }
-
+  */
   
+  std::vector<uint> counts(MAX_UINT_VAL);
+
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {                                                                                      
+    counts[iter->first] = iter->second;  
+  }                                                                                                                                                                                                      
+
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
   btree::btree_map<uint, uint>().swap( hashed_counts );
-
+  /*
   ofstream out_hashes_file(params.tmp_hashes_filename.c_str(), ios::out | ios::binary), 
     out_counts_file(params.tmp_counts_filename.c_str(), ios::out | ios::binary);
 
@@ -323,9 +326,9 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint>().swap( counts );
   out_counts_file.close();
 
-
+  */
   pthread_mutex_lock( &KMerge::mutex );
-
+  /*
   ifstream in_hashes_file(params.tmp_hashes_filename.c_str(), ios::in | ios::binary), 
     in_counts_file(params.tmp_counts_filename.c_str(), ios::in | ios::binary);
   
@@ -347,7 +350,6 @@ void KMerge::BuilderTask::execute() {
     return;
   }
   std::vector<uint>().swap( hashes );
-
   try {
     params.kmerge->dlog << dlib::LINFO << "De-serializing counts for  " << params.group_name;
     dlib::deserialize(counts, in_counts_file);
@@ -359,7 +361,7 @@ void KMerge::BuilderTask::execute() {
   }
 
   in_counts_file.close();
-
+  */
 
   if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
@@ -381,8 +383,10 @@ void KMerge::BuilderTask::execute() {
 
   params.kmerge->dlog << dlib::LINFO << "Done (" << params.group_name  << ")";
 
+  /*
   remove(params.tmp_hashes_filename.c_str());
   remove(params.tmp_counts_filename.c_str());
+  */
   return;
 
 }
