@@ -12,12 +12,12 @@ def groups_to_matrix(m_file, c_file):
     counts =  h5fh.root.counts
 
     grouph5fh = tables.open_file(c_file, mode='r')
-    for group_id in list(grouph5fh.root._v_groups):
-        path = "/%s" % group_id
+    for group_num in list(grouph5fh.root._v_groups):
+        path = "/%s" % group_num
         print "Processing counts for %s" % path
         counts.append(np.resize(grouph5fh.getNode(path, 'count').read(), (2**32-1,1)))
         col_num = counts.shape[1]-1
-        new_group = h5fh.create_group(h5fh.root, group_id, title="%s" % col_num)
+        new_group = h5fh.create_group(h5fh.root, "%s|%s" % (group_num, col_num))
         print "Adding taxonomy data for %s" % path
         h5fh.copy_node(grouph5fh.getNode(path, 'taxonomy'), new_group, 'taxonomy', recursive=True)
         print "Finished processing %s" % path
