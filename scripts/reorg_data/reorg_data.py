@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 
 def groups_to_matrix(m_file, c_file):
-    filters = tables.Filters(complevel=9, complib='zlib')
+    filters = tables.Filters(complevel=1, complib='blosc', fletcher32=True)
     h5fh = tables.open_file(m_file, mode='a', filters=filters)
     if not 'counts' in h5fh.root:
         atom = tables.UInt32Atom()
