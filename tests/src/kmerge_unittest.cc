@@ -50,11 +50,8 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   uint rank = 2;
   uint fillvalue = 0;   /* Fill value for the dataset */
   H5::DSetCreatPropList plist;
-  hsize_t max_dims[2] = {MAX_UINT_VAL, 3125};
+  hsize_t max_dims[2] = {MAX_UINT_VAL, H5S_UNLIMITED};
   hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
-  //hsize_t chunk_dims[2] = {1000000, 1};
-  //hsize_t chunk_dims[2] = {10, 7500}; // chunks should not exceed 300k bytes (https://github.com/h5py/h5py/wiki/Guide-To-Compression)
-                                      // prefering chunk shape to pull row-wise data more easily than column-wise data
 
   cd_values[4] = 1;       /* compression level */
   cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
@@ -153,14 +150,16 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   coords.push_back(10); // count = 0
   coords.push_back(0); // count = 0
 
-  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"                                                                                                                                                     
-  /*
-  uint* c_result = new uint[coords.size()/2];
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+  uint num_hashes = coords.size() / 2;
+
+  uint* c_result = new uint[num_hashes];
   query_processor->getSelectedData("counts", coords, c_result, "/");
 
   delete query_processor;
+
   uint adj_pos = 0;
-  for(uint i = 0; i < coords.size()/2; i++) {
+  for(uint i = 0; i < num_hashes; i++) {
     if (c_result[i] != 0) {
       REQUIRE(freq[adj_pos] == c_result[i]);
       adj_pos++;
@@ -168,11 +167,91 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   }
 
   delete [] c_result;
-  */
+
+  file = new H5::H5File( file_name, H5F_ACC_RDWR );
+  
+  dataset = new H5::DataSet( file->openDataSet( ds_name ) );
+  
+  H5::DataSpace dataspace = dataset->getSpace();
+  rank = dataspace.getSimpleExtentNdims();
+
+  hsize_t dims_out[2];
+  int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
+  REQUIRE(dims_out[0] == MAX_UINT_VAL);
+  REQUIRE(dims_out[1] == 1);
+  hsize_t offset[2];
+  offset[0] = 0;
+  offset[1] = dims_out[1];
+  dims_out[1]++; // extend dataset by 1
+  dataset->extend( dims_out );
+
+  DataSpace fspace = dataset->getSpace();
+
+
+  fspace.selectHyperslab( H5S_SELECT_SET, data_dims, offset );
+  DataSpace mspace( rank, data_dims );
+
+  // build sample kmerge file
+
+  kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
+  params.kmerge = kmerge;
+  success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
+  REQUIRE(success == true);
+
+  REQUIRE(hashed_counts.size() == 324);
+
+  counts.resize(MAX_UINT_VAL);
+
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    counts[iter->first] = iter->second;
+  }
+
+  hashed_counts.clear();
+  btree::btree_map<uint, uint>().swap( hashed_counts );
+
+  dataset->write( &counts[0], H5::PredType::NATIVE_UINT, mspace, fspace );
+
+  counts.clear();
+  std::vector<uint>().swap(counts);
+
+  dataset->close();
+  delete dataset;
+
+  file->close();
+  delete file;
+
+  // search for data
+  query_processor = new QueryProcessor("matrix.h5", FQ::FQ_HDF5);
+
+  // test that search does not return incorrect values
+  //find coordinates of values of interest 
+  uint hashes_arr2[] = {1022408118, 0, 1043881921, 0, 1045475391, 0, 1049435108, 0, 1130773752, 0, 1022408118, 1, 1043881921, 1, 1045475391, 1, 1049435108, 1, 1130773752, 1};
+
+  std::vector<uint64_t> coords2(hashes_arr2, hashes_arr2 + 20);
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+  num_hashes = coords2.size() / 2;
+
+  c_result = new uint[num_hashes];
+  query_processor->getSelectedData("counts", coords2, c_result, "/");
+
   delete query_processor;
 
-}
 
+  adj_pos = 0;
+  for(uint i = 0; i < num_hashes; i++) {
+    if (c_result[i] != 0) {
+      REQUIRE(freq[adj_pos % 5] == c_result[i]);
+      adj_pos++;
+    }
+  }
+
+  delete [] c_result;
+
+  if (remove("matrix.h5") != 0) {
+    perror( "Error deleting file");
+  }
+}
 
 TEST_CASE("StoreKmerHashesAsFastBitIndices", "[FastBitTest]") {
   uint hash;
