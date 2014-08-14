@@ -10,10 +10,12 @@
 #include "klib/kseq.h"
 #include <zlib.h>
 #include "cpp-btree/btree_map.h"
+#include <google/sparsetable>
 
 KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
+#define MAX_CHUNK_SIZE 4000000000 //4 GB
 #define THROTTLE_KMER_LENGTH 19 //lock k-mer counting above this value to throttle memory allocation for longer k-mers
 
 using namespace std;
@@ -49,11 +51,14 @@ class KMerge {
   std::string filename;
 
  public:
+  static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
+
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&);
   void build(param_struct&);
   bool count_hashed_kmers_fasta(param_struct&, btree::btree_map<uint, uint>&);
+  bool count_hashed_kmers_fasta(param_struct&, google::sparsetable<uint>&);
   bool count_hashed_kmers_fastq(param_struct&, btree::btree_map<uint, uint>&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);

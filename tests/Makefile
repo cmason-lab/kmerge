@@ -7,7 +7,7 @@ PROGRAM_SRC_DIR = $(HOME_DIR)/Development/kmerge/src
 # Flags passed to the preprocessor.
 # Set Google Test's header directory as a system directory, such that
 # the compiler doesn't generate warnings in Google Test headers.
-CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR)
+CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR) -I $(HOME_DIR)/hdf5-1.8.13/include
 
 #OPT = -O2
 
@@ -23,7 +23,7 @@ CXX=g++ -std=c++11
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(HOME_DIR)/hdf5-1.8.13/lib -lhdf5 -lhdf5_hl_cpp -lhdf5_cpp -lhdf5_hl  -lblosc
 
 # House-keeping build targets.
 
@@ -32,7 +32,7 @@ all : $(TESTS)
 clean :
 	rm -f $(TESTS) *.o
 
-kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o
+kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o blosc_filter.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c
@@ -46,3 +46,6 @@ murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DI
 
 kmerge_unittest.o : $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(LDFLAGS)
+
+blosc_filter.o:
+	gcc -Wall -Wextra -I/home/darryl/include -c $(HOME_DIR)/include/blosc_filter.c -o $@ -I/home/darryl/include -I/home/darryl/hdf5-1.8.13/include/ -L /home/darryl/hdf5-1.8.13/lib/ -lhdf5 -L/home/darryl/lib -lblosc

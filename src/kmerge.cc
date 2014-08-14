@@ -142,6 +142,33 @@ bool KMerge::count_hashed_kmers_fasta(param_struct& params, btree::btree_map<uin
   return true;
 }
 
+bool KMerge::count_hashed_kmers_fasta(param_struct& params, google::sparsetable<uint>& hashed_counts) {
+  int l;
+  kseq_t *seq;
+  gzFile fp; 
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    uint hash;
+
+    uint k = params.k_val_start;
+    if(seq_str.size() < k) continue;
+    for (uint j = 0; j < seq_str.size() - k + 1; j++) {
+      std::string kmer = seq_str.substr(j, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides            
+	continue;
+      }
+      hash = params.kmerge->hash_kmer(kmer);
+      hashed_counts[hash] = hashed_counts[hash] + 1;
+    }
+  }
+  
+  return true;
+}
+
 bool KMerge::count_hashed_kmers_fastq(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
   pthread_mutex_t mutex;
 

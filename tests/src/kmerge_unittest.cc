@@ -13,6 +13,165 @@
 #include <iomanip>
 #include "indexBuilder.h"
 #include "queryProcessor.h"
+#include "H5Cpp.h"
+#include "blosc_filter.h"
+
+
+#ifndef H5_NO_NAMESPACE
+using namespace H5;
+#endif
+
+TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
+  uint num_cols = 1;
+  unsigned int cd_values[7];
+  char *version, *date;
+  int r, i;
+  const H5std_string ds_name("counts");
+  const H5std_string file_name("matrix.h5");
+
+  /* Register the filter with the library */
+  r = register_blosc(&version, &date);
+  printf("Blosc version info: %s (%s)\n", version, date);
+
+
+  H5::H5File *file = new H5::H5File( file_name, H5F_ACC_TRUNC );
+  
+/*ifstream ifile("matrix.h5");
+  if (ifile) {
+    this->file = new H5File( this->file_name, H5F_ACC_RDWR );
+  } else {
+    this->file = new H5File( this->file_name, H5F_ACC_TRUNC );
+    }*/
+
+  /*                              
+   * Create property list for a dataset and set up fill values. 
+   */
+  uint total_columns = 3125;
+  uint rank = 2;
+  uint fillvalue = 0;   /* Fill value for the dataset */
+  H5::DSetCreatPropList plist;
+  hsize_t max_dims[2] = {MAX_UINT_VAL, 3125};
+  hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
+  //hsize_t chunk_dims[2] = {1000000, 1};
+  //hsize_t chunk_dims[2] = {10, 7500}; // chunks should not exceed 300k bytes (https://github.com/h5py/h5py/wiki/Guide-To-Compression)
+                                      // prefering chunk shape to pull row-wise data more easily than column-wise data
+
+  cd_values[4] = 1;       /* compression level */
+  cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
+  cd_values[6] = BLOSC_LZ4HC; /* the actual compressor to use */
+
+  plist.setChunk(rank, chunk_dims);
+  plist.setFillValue(H5::PredType::NATIVE_UINT, &fillvalue);
+  plist.setFilter(FILTER_BLOSC, H5Z_FLAG_OPTIONAL, 7, cd_values);
+  plist.setShuffle();
+  plist.setFletcher32();
+
+  /* 
+   * Create dataspace for the dataset                   
+   */
+  const hsize_t data_dims[2] = {MAX_UINT_VAL, num_cols}; 
+                                                                                                     
+  H5::DataSpace file_space( rank, data_dims, max_dims);
+
+
+
+  /* 
+   * Create dataset and write it into the file.                        
+   */
+
+  H5::DataSpace mem_space( rank, data_dims, max_dims );
+
+  H5::DataSet* dataset = new H5::DataSet( file->createDataSet(ds_name, H5::PredType::NATIVE_UINT, file_space, plist));
+
+  uint hash;
+  std::stringstream path;
+  btree::btree_map<uint, uint> hashed_counts;
+  param_struct params;
+
+  params.k_val_start = 5;
+  params.k_val_end = 5;
+  params.hdf5_filename = "dummy.h5";
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
+  params.tmp_hashes_filename = "";
+  params.tmp_counts_filename = "";
+  params.group_name = "/test";
+  params.hash_dataset_name =  "/test/kmer_hash";
+  params.counts_dataset_name = "/test/count";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+  // build sample kmerge file                                                                                                                                                                                                                      
+
+  KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
+  params.kmerge = kmerge;
+  bool success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
+  REQUIRE(success == true);
+
+  REQUIRE(hashed_counts.size() == 324);
+
+  std::vector<uint> counts(MAX_UINT_VAL);
+
+  std::cout << "loading counts from btree_map" << std::endl;
+  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    counts[iter->first] = iter->second;
+  }
+  std::cout << "Done" << std::endl;
+
+  hashed_counts.clear();
+  btree::btree_map<uint, uint>().swap( hashed_counts );
+
+  std::cout << "Writing data" << std::endl;
+  dataset->write( &counts[0], H5::PredType::NATIVE_UINT, mem_space, file_space );
+  std::cout << "Done" << std::endl;
+
+  counts.clear();
+  std::vector<uint>().swap(counts);
+
+  dataset->close();
+  delete dataset;
+
+  file->close();
+  delete file;
+
+
+  // search for data                                                                                                                                                                                                                               
+  QueryProcessor* query_processor = new QueryProcessor("matrix.h5", FQ::FQ_HDF5);
+
+  // test that search does not return incorrect values                                                                                                                                                                                             
+
+  //find coordinates of values of interest                                                                                                                                                                                                         
+  uint hashes_arr[] = {1022408118, 0, 1043881921, 0, 1045475391, 0, 1049435108, 0, 1130773752, 0};
+  //uint hashes_arr[] = {1022408118, 1043881921, 1045475391, 1049435108, 1130773752};
+  // test that search does not return incorrect values                                                                                                                                                                                             
+  std::vector<uint64_t> coords(hashes_arr, hashes_arr + 10);
+  //std::vector<uint64_t> coords(hashes_arr, hashes_arr + 5);
+  uint counts_arr[] = {1, 1, 1, 4, 97};
+  std::vector<uint> freq(counts_arr, counts_arr + 5);
+
+  coords.push_back(1); // count = 0
+  coords.push_back(0); // count = 0
+
+  coords.push_back(10); // count = 0
+  coords.push_back(0); // count = 0
+
+  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"                                                                                                                                                     
+  /*
+  uint* c_result = new uint[coords.size()/2];
+  query_processor->getSelectedData("counts", coords, c_result, "/");
+
+  delete query_processor;
+  uint adj_pos = 0;
+  for(uint i = 0; i < coords.size()/2; i++) {
+    if (c_result[i] != 0) {
+      REQUIRE(freq[adj_pos] == c_result[i]);
+      adj_pos++;
+    }
+  }
+
+  delete [] c_result;
+  */
+  delete query_processor;
+
+}
 
 
 TEST_CASE("StoreKmerHashesAsFastBitIndices", "[FastBitTest]") {
