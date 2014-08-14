@@ -4,21 +4,21 @@ DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
 CXX=g++ -std=c++11
 CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
 
-CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(PROGRAM_SRC_DIR)
+CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(HOME_DIR)/hdf5-1.8.13/include
 
-LDFLAGS+=-lrt -lm -lz -lcityhash -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -L $(HOME_DIR)/lib -lsz
+LDFLAGS+=-lrt -lm -lz -lcityhash -L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -L $(HOME_DIR)/lib -lsz -L $(HOME_DIR)/hdf5-1.8.13/lib -lhdf5 -lhdf5_hl_cpp -lhdf5_cpp -lhdf5_hl -lblosc
 
 
 default: all
 all: kmerge
 
 kmerge: main.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) main.o kmerge.o murmur_hash.o spookyV2.o $(HOME_DIR)/include/dlib/all/source.cpp -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) main.o kmerge.o murmur_hash.o spookyV2.o blosc_filter.o $(HOME_DIR)/include/dlib/all/source.cpp -o $@ $(LDFLAGS)
 
 main.o: kmerge.o $(SRC)/main.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC)/main.cc -o $@ $(LDFLAGS)
 
-kmerge.o: spookyV2.o murmur_hash.o $(SRC)/kmerge.h $(SRC)/kmerge.cc
+kmerge.o: spookyV2.o murmur_hash.o $(SRC)/kmerge.h $(SRC)/kmerge.cc blosc_filter.o
 #	$(CXX) $(CPPFLAGS) $(CXXFLAGS) spookyV2.o murmur_hash.o -c $(SRC)/kmerge.cc -o $@ $(LDFLAGS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC)/kmerge.cc -o $@ $(LDFLAGS)
 
@@ -28,6 +28,8 @@ spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/Spo
 murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp -o $@ $(LDFLAGS)
 
+blosc_filter.o:
+	gcc -Wall -Wextra -I/home/darryl/include -c $(HOME_DIR)/include/blosc_filter.c -o $@ -I/home/darryl/include -I/home/darryl/hdf5-1.8.13/include/ -L /home/darryl/hdf5-1.8.13/lib/ -lhdf5 -L/home/darryl/lib -lblosc
 
 clean:
 	rm -f *.o kmerge

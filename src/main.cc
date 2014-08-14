@@ -17,6 +17,7 @@ int main(int argc, char const ** argv) {
   parser.add_option("i", "Location of single sequence file", 1);
   parser.add_option("t", "Max number of threads to use", 1);
   parser.add_option("f", "Hash function to use for k-mers", 1);
+  parser.add_option("p", "Lock priority for HDF5 file name", 1);
   parser.add_option("h","Display this help message.");
 
 
@@ -28,7 +29,7 @@ int main(int argc, char const ** argv) {
     return 0;
   }
   //Ensure options only defined once
-  const char* one_time_opts[] = {"o", "k", "d", "i", "t", "f", "h"};
+  const char* one_time_opts[] = {"o", "k", "d", "i", "t", "f", "p", "h"};
   parser.check_one_time_options(one_time_opts);
 
   //Check only one of d and i options given
@@ -63,11 +64,12 @@ int main(int argc, char const ** argv) {
   uint k_val_start = 0;
   uint k_val_end = 0;
   std::string hdf5_filename, seq_dir("."), hash_func("lookup3"), in_file;
-  uint num_threads = 1, max_threads = 0, parallel_for_threads = 1;
+  uint num_threads = 1, max_threads = 0, parallel_for_threads = 1, priority = 1;
 
   hdf5_filename = parser.option("o").argument();
   k_val_start = atoi(parser.option("k").argument(0).c_str());
   k_val_end = atoi(parser.option("k").argument(1).c_str());
+
 
   if ((k_val_start % 2 == 0) || (k_val_end % 2 == 0)) {
     std::cerr << "Error in command line:\n   Start and end k-mer values must be odd" << std::endl;
@@ -99,7 +101,12 @@ int main(int argc, char const ** argv) {
       hash_func = option;
     }
   }
-  
+  if (parser.option("p")) {
+    priority = atoi(parser.option("p").argument().c_str());
+    if (priority < 0) {
+      priority = 1;
+    }
+  }
   stringstream seq_filename, file_loc, dataset_name, tmp_hashes_filename, tmp_counts_filename;
   vector<uint> hashes;
   vector<uint> counts;
@@ -143,6 +150,7 @@ int main(int argc, char const ** argv) {
 	      param_struct params;
 	      params.kmerge = kmerge;
 	      params.hdf5_filename = hdf5_filename;
+	      params.lock_filename = params.hdf5_filename + std::string(".lck");
 	      params.k_val_start = k_val_start;
 	      params.k_val_end = k_val_end;
 	      params.group_name = std::string("/") + s_org;
@@ -162,6 +170,7 @@ int main(int argc, char const ** argv) {
 	      tmp_counts_filename << seq_dir << "/" << s_org << "/" << "counts.bin";
 	      params.tmp_counts_filename = tmp_counts_filename.str();
 	      params.num_threads = parallel_for_threads;
+	      params.priority = priority;
 	      KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
 	      tp.add_task(*task, &KMerge::BuilderTask::execute);
 	      task_ptrs.push_back(task);

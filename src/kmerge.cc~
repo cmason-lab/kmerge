@@ -4,7 +4,7 @@
 #include "city.h"
 #include <dlib/serialize.h>
 #include <fstream>
-#include "indexBuilder.h"
+#include <unistd.h>
 
 using namespace std;
 
@@ -14,7 +14,7 @@ pthread_mutex_t KMerge::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
   this->filename = filename;
-  this->hdf5_file = new HDF5(this->filename, false);
+  //this->hdf5_file = new HDF5(this->filename, false);
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
 
@@ -34,12 +34,7 @@ KMerge::KMerge (const std::string& filename, const std::string& hash_func, const
 }
 
 KMerge::~KMerge() {
-  delete this->hdf5_file;
-  // index data
-  /*IndexBuilder* index_builder = new IndexBuilder(this->filename, FQ::FQ_HDF5, this->filename);
-  index_builder->buildIndexes(0, "kmer_hash");
-  delete index_builder;
-  */
+  //delete this->hdf5_file;
 }
 
 std::string KMerge::rev_comp(const std::string& input) {
@@ -148,6 +143,7 @@ bool KMerge::count_hashed_kmers_fasta(param_struct& params, btree::btree_map<uin
   return true;
 }
 
+
 bool KMerge::count_hashed_kmers_fastq(param_struct& params, btree::btree_map<uint, uint>& hashed_counts) {
   pthread_mutex_t mutex;
 
@@ -159,13 +155,89 @@ bool KMerge::count_hashed_kmers_fastq(param_struct& params, btree::btree_map<uin
   return true;
 }
 
+bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& params) {
+  H5File* file;
+  H5::DataSet* dataset;
+  uint num_cols = 1, rank;
+  char *version, *date;
+  int r, i;
+  const std::string ds_name("counts");
+  const hsize_t data_dims[2] = {data_size, num_cols};
+  
+  /* Register the filter with the library */
+  r = register_blosc(&version, &date);
+
+  ifstream ifile(this->filename);  
+  if (ifile) { 
+    file = new H5File( this->filename, H5F_ACC_RDWR );
+    dataset = new H5::DataSet( file->openDataSet( ds_name ) );
+
+    H5::DataSpace dataspace = dataset->getSpace();
+    rank = dataspace.getSimpleExtentNdims();
+
+    hsize_t dims_out[2];
+    int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
+    hsize_t offset[2];
+    offset[0] = 0;
+    offset[1] = dims_out[1];
+    params.compound_name = params.group_name + std::string("|") + std::to_string(dims_out[1]);
+    dims_out[1]++; // extend dataset by 1                                                                                                                                                                                                      
+    dataset->extend( dims_out );
+
+    DataSpace fspace = dataset->getSpace();
+    fspace.selectHyperslab( H5S_SELECT_SET, data_dims, offset );
+    DataSpace mspace( rank, data_dims );
+    dataset->write( &data[0], H5::PredType::NATIVE_UINT, mspace, fspace );
+    dataset->close();
+    delete dataset;
+  } else {
+    file = new H5File( this->filename, H5F_ACC_TRUNC );
+    unsigned int cd_values[7];
+    /*
+     * Create property list for a dataset and set up fill values. 
+     */
+    rank = 2;
+    uint fillvalue = 0;   /* Fill value for the dataset */
+    H5::DSetCreatPropList plist;
+    hsize_t max_dims[2] = {data_size, H5S_UNLIMITED};
+    hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, num_cols};
+
+    cd_values[4] = 1;       /* compression level */
+    cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
+    cd_values[6] = BLOSC_LZ4HC; /* the actual compressor to use */
+
+    plist.setChunk(rank, chunk_dims);
+    plist.setFillValue(H5::PredType::NATIVE_UINT, &fillvalue);
+    plist.setFilter(FILTER_BLOSC, H5Z_FLAG_OPTIONAL, 7, cd_values);
+    plist.setShuffle();
+    plist.setFletcher32();
+
+    /* 
+     * Create dataspace for the dataset 
+     */
+    H5::DataSpace fspace( rank, data_dims, max_dims);
+
+    /*
+     * Create dataset and write it into the file.
+     */
+    H5::DataSpace mspace( rank, data_dims, max_dims );
+    dataset = new H5::DataSet( file->createDataSet(ds_name, H5::PredType::NATIVE_UINT, fspace, plist));
+    dataset->write( &data[0], H5::PredType::NATIVE_UINT, mspace, fspace );
+    dataset->close();
+    delete dataset;
+    params.compound_name = params.group_name + std::string("|0");
+  }
+  
+  file->close();
+  delete file;
+  
+  return true;
+}
 
 bool KMerge::add_dataset(const std::string dataset_path, const uint data_size, const uint* data, HDF5* h5_file=NULL) {
   std::vector<uint64_t> dims;
 
-  if (h5_file == NULL) {
-    h5_file = this->hdf5_file;
-  }
+  delete this->hdf5_file; //close the file
 
   dims.push_back(data_size);
   if (!(h5_file->createDataset(dataset_path, dims, FQ::FQT_UINT))) {
@@ -177,40 +249,44 @@ bool KMerge::add_dataset(const std::string dataset_path, const uint data_size, c
     return false;
   }
 
+  this->hdf5_file = new HDF5(this->filename, false);
+
   return true;
 }
 
 
-bool KMerge::add_taxonomy(const std::string& group) {
+bool KMerge::add_taxonomy(const std::string& group_name, const std::string& compound_group_name) {
   std::stringstream path, in_file_ss, path_root, error;
   std::vector<std::string> lines;
   std::vector<uint64_t> dims;
   std::string line;
 
+  HDF5* hdf5_file = new HDF5(this->filename, false);
 
-  path_root << group << "/taxonomy";
+  path_root << group_name << "/taxonomy";
+
   in_file_ss << this->dir << path_root.str() << ".txt";
   ifstream in_file(in_file_ss.str().c_str());
-
 
   dims.push_back(0);
 
   while (std::getline(in_file, line)) {
     std::istringstream tokenizer(line);
     path.str("");
-    path << path_root.str();
+    path << compound_group_name << "/taxonomy";
     while (!tokenizer.eof()) {
       std::string token;
       getline(tokenizer, token, '\t');
       path << "/" << token;
     }
-    if (!(this->hdf5_file->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
+    if (!(hdf5_file->createDataset(path.str(), dims, FQ::FQT_BYTE))) {
       this->dlog << dlib::LERROR << "Unable to add classification:" << path.str();
       return false;
     }
   }
   
   in_file.close();
+  delete hdf5_file;
 
   return true;
 }
@@ -333,7 +409,7 @@ void KMerge::BuilderTask::execute() {
   out_counts_file.close();
 
   */
-  pthread_mutex_lock( &KMerge::mutex );
+  //pthread_mutex_lock( &KMerge::mutex );
   /*
   ifstream in_hashes_file(params.tmp_hashes_filename.c_str(), ios::in | ios::binary), 
     in_counts_file(params.tmp_counts_filename.c_str(), ios::in | ios::binary);
@@ -368,22 +444,32 @@ void KMerge::BuilderTask::execute() {
 
   in_counts_file.close();
   */
-
+  /*
   if(!(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
     pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
+  */
+  
+  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority);
 
-  std::vector<uint>().swap( counts );
-
-  if(!(params.kmerge->add_taxonomy(params.group_name))) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
-    pthread_mutex_unlock( &KMerge::mutex );
+  if(!(params.kmerge->add_dataset(counts.size(), &counts[0], params))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    //pthread_mutex_unlock( &KMerge::mutex );
     return;
   }
 
-  pthread_mutex_unlock( &KMerge::mutex );
+  if(!(params.kmerge->add_taxonomy(params.group_name, params.compound_name))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
+    //pthread_mutex_unlock( &KMerge::mutex );
+    return;
+  }
+  rmdir(params.lock_filename.c_str());
+  
+  counts.clear();
+  std::vector<uint>().swap( counts );
+  //pthread_mutex_unlock( &KMerge::mutex );
 
   params.kmerge->dlog << dlib::LINFO << hash_count << " k-mer hashes for " << params.group_name;
 

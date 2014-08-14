@@ -33,20 +33,12 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   r = register_blosc(&version, &date);
   printf("Blosc version info: %s (%s)\n", version, date);
 
-
+ 
   H5::H5File *file = new H5::H5File( file_name, H5F_ACC_TRUNC );
-  
-/*ifstream ifile("matrix.h5");
-  if (ifile) {
-    this->file = new H5File( this->file_name, H5F_ACC_RDWR );
-  } else {
-    this->file = new H5File( this->file_name, H5F_ACC_TRUNC );
-    }*/
-
+   
   /*                              
    * Create property list for a dataset and set up fill values. 
    */
-  uint total_columns = 3125;
   uint rank = 2;
   uint fillvalue = 0;   /* Fill value for the dataset */
   H5::DSetCreatPropList plist;
@@ -253,99 +245,6 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   }
 }
 
-TEST_CASE("StoreKmerHashesAsFastBitIndices", "[FastBitTest]") {
-  uint hash;
-  std::stringstream path;
-  btree::btree_map<uint, uint> hashed_counts;
-  param_struct params;
-
-  params.k_val_start = 5;
-  params.k_val_end = 5;
-  params.hdf5_filename = "index_data.h5";
-  params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
-  params.tmp_hashes_filename = "";
-  params.tmp_counts_filename = "";
-  params.group_name = "/test";
-  params.hash_dataset_name =  "/test/kmer_hash";
-  params.counts_dataset_name = "/test/count";
-  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
- 
-  // build sample kmerge file
-
-  KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
-  params.kmerge = kmerge;
-  bool success = kmerge->count_hashed_kmers_fasta(params, hashed_counts);
-  REQUIRE(success == true);
-
-  REQUIRE(hashed_counts.size() == 324);
-
-  std::vector<uint> hashes, counts;
-  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    hashes.push_back(iter->first);                                                                
-    counts.push_back(iter->second);
-  }
-
-  REQUIRE(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL) == true);
-  REQUIRE(params.kmerge->add_dataset(params.counts_dataset_name, counts.size(), &counts[0], NULL) == true);
-
-  delete kmerge;
- 
-  // add indices to file
-  IndexBuilder* index_builder = new IndexBuilder("index_data.h5", FQ::FQ_HDF5, "index_data.h5");
-  index_builder->buildIndexes(0, "kmer_hash");
-  delete index_builder;
-
-  // search for data
-  QueryProcessor* query_processor = new QueryProcessor("index_data.h5", FQ::FQ_HDF5);
-
-  // test that search does not return incorrect values
-  std::vector<double> np_ids;
-  np_ids.push_back(10);
-  std::vector<uint64_t> coords;
-  uint hits = query_processor->executeEqualitySelectionQuery("kmer_hash", np_ids, coords, "/test");
-  REQUIRE(hits == 0);
-  REQUIRE(coords.size() == 0);
-
-  //find coordinates of values of interest
-  uint hashes_arr[] = {1022408118, 1043881921, 1045475391, 1049435108, 1130773752};
-  std::vector<double> ids(hashes_arr, hashes_arr + 5);
-  std::vector<uint> hashes_ref(hashes_arr, hashes_arr + 5);
-  uint counts_arr[] = {1, 1, 1, 4, 97};
-  std::vector<uint> freq(counts_arr, counts_arr + 5);
-
-  ids.push_back(1); // count = 0
-  ids.push_back(10); // count = 0
-
-  hits = query_processor->executeEqualitySelectionQuery("kmer_hash", ids, coords, "/test");
-  REQUIRE(hits == 5);
-  REQUIRE(ids.size() != coords.size());
-  REQUIRE(coords.size() == 5);
-
-  //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
-
-  uint* h_result = new uint[coords.size()]; 
-  uint* c_result = new uint[coords.size()];
-  query_processor->getSelectedData("kmer_hash", coords, h_result, "/test");
-  query_processor->getSelectedData("count", coords, c_result, "/test");
-
-  delete query_processor;
-  
-  for(uint i = 0; i < coords.size(); i++) {
-    std::vector<uint>::iterator iter = std::find (hashes_ref.begin(), hashes_ref.end(), h_result[i]);
-    REQUIRE(iter != hashes_ref.end());
-    uint pos = iter - hashes_ref.begin();
-    REQUIRE(freq[pos] == c_result[i]);
-  }
-  
-  delete [] h_result;
-  delete [] c_result;
-
-
-  if (remove("index_data.h5") != 0) {
-    perror( "Error deleting file");
-  }
- 
-}
 
 TEST_CASE("StoreDenseCounts", "[HashTest]") {
   uint hash;
@@ -935,6 +834,8 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params.hash_dataset_name =  "/org1/kmer_hash";
   params.counts_dataset_name = "/org1/count";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+  params.priority = 1;
+  params.lock_filename = params.hdf5_filename + std::string(".lck");
 
   params.seq_filename ="/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   
@@ -1025,79 +926,6 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 }
 
 
-/*
-TEST_CASE("ProblemGenomeTest", "[HashTest]") {
-  param_struct params1, params2, params3;
-
-  FQ::DataType type;
-  std::vector<uint64_t> dims;
-  std::string hash_dataset_name("kmer_hash"), counts_dataset_name("count");
-
-  params1.k_val_start = 3;
-  params1.k_val_end = 3;
-  params1.hdf5_filename = "problem.h5";
-  params1.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/57623.fasta.gz";
-  params1.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/hashes.bin";
-  params1.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/57623/counts.bin";
-  params1.group_name = "/57623";
-  params1.hash_dataset_name =  "/57623/kmer_hash";
-  params1.counts_dataset_name = "/57623/count";
-  params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
-
-  params2.k_val_start = 3;
-  params2.k_val_end = 3;
-  params2.hdf5_filename = "/home/darryl/Development/kmerge/tests/problem.h5";
-  params2.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/50385.fasta.gz";
-  params2.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/hashes.bin";
-  params2.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/50385/counts.bin";
-  params2.group_name = "/50385";
-  params2.hash_dataset_name =  "/50385/kmer_hash";
-  params2.counts_dataset_name = "/50385/count";
-  params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
-
-  dlib::thread_pool tp(3);
-
-  KMerge* kmerge = new KMerge(params1.hdf5_filename, "lookup3", ".");
-
-  params1.kmerge = kmerge;
-  params2.kmerge = kmerge;
-
-  KMerge::BuilderTask t1(params1);
-  KMerge::BuilderTask t2(params2);
-
-  tp.add_task(t1, &KMerge::BuilderTask::execute);
-  tp.add_task(t2, &KMerge::BuilderTask::execute);
-
-  tp.wait_for_all_tasks();
-
-  delete kmerge;
-
-  HDF5 *sample = new HDF5(params1.hdf5_filename);
-
-  if (!(sample->getVariableInfo(params1.counts_dataset_name, dims, &type))) {
-    cerr << "Cannot access sample variable information."  << endl;
-  }
-  
-  REQUIRE(dims[0] == MAX_UINT_VAL);
-  dims.clear();
-
-  if (!(sample->getVariableInfo(params2.counts_dataset_name, dims, &type))) {
-    cerr << "Cannot access sample variable information."  << endl;
-  }
-
-  REQUIRE(dims[0] == MAX_UINT_VAL);
-
-
-  delete sample;
-   
-
-  if (remove( params1.hdf5_filename.c_str() ) != 0) {
-    perror( "Error deleting file");
-  }
-
-}
-*/
-
 TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
   param_struct params;
   FQ::DataType type;
@@ -1158,7 +986,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes, counts;
-  uint *hashes_arr, *counts_arr, kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos;
+  uint *hashes_arr, **counts_arr, kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos;
   param_struct params1, params2, params3;
 
   FQ::DataType type;
@@ -1178,8 +1006,11 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
 
   params1.hdf5_filename = "thread_example.h5";
+  params1.lock_filename =  params1.hdf5_filename + std::string(".lck");
   params2.hdf5_filename = "thread_example.h5";
+  params2.lock_filename =  params2.hdf5_filename + std::string(".lck");
   params3.hdf5_filename = "thread_example.h5";
+  params3.lock_filename =  params3.hdf5_filename + std::string(".lck");
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
   params1.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/208831/hashes.bin";
@@ -1188,7 +1019,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
   params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
-
+  params1.priority = 1;
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
   params2.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/209328/hashes.bin";
@@ -1197,6 +1028,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
   params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
+  params2.priority = 2;
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
   params3.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/54095/hashes.bin";
@@ -1205,6 +1037,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";
   params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
+  params3.priority = 3;
 
   uint thread_count = 3;
 
@@ -1230,51 +1063,37 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
     FastQuery *sample = new FastQuery(params1.hdf5_filename, FQ::FQ_HDF5);
  
-    if (!(sample->getVariableInfo(counts_dataset_name, counts_dataset_name, dims, &type, params1.group_name))) {
+    if (!(sample->getVariableInfo("counts", counts_dataset_name, dims, &type, "/"))) {
       cerr << "Cannot access sample variable information."  << endl;
     }
 
-    //REQUIRE(dims[0] == 512);
     REQUIRE(dims[0] == MAX_UINT_VAL);
+    REQUIRE(dims[1] == 3);
 
-    /*    hashes_arr = new uint[dims[0]];
+    QueryProcessor* query_processor = new QueryProcessor(params1.hdf5_filename, FQ::FQ_HDF5);
 
-    if (!(sample->getData("kmer_hash", hashes_arr, &params1.group_name[0]))) {
-      cerr << "Cannot access sample hashes" << endl;
-    }
-    */
-    counts_arr = new uint[dims[0]];
+    //find coordinates of values of interest 
+    uint hashes_arr[] = {1130773752, 0, 1282497623, 0, 1130773752, 1, 1282497623, 1, 1130773752, 2, 1282497623, 2};
 
+    std::vector<uint64_t> coords(hashes_arr, hashes_arr + 12);
 
-    if(!(sample->getData("count", counts_arr, &params1.group_name[0]))) {
-      cerr << "Cannot access sample counts" << endl;
-      exit(EXIT_FAILURE);
-    }
+    //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
+    uint num_hashes = coords.size() / 2;
+
+    uint* counts_arr = new uint[num_hashes];
+    query_processor->getSelectedData("counts", coords, counts_arr, "/");
+
+    delete query_processor;
+
 
     kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
     kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
-    /*
-    for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
-        kmer1_pos = pos;
-      }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
-        kmer2_pos = pos;
-      }
-    }
 
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
-    REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
-    REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
-    */
     //AAAAA/TTTTT : 1130773752
-    REQUIRE(counts_arr[1130773752] == kmer1_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer1_count) != counts_arr+num_hashes);
     //GCGAT/ATCGC : 1282497623
-    REQUIRE(counts_arr[1282497623] == kmer2_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer2_count) != counts_arr+num_hashes);
 
-    delete [] counts_arr;
-    //delete [] hashes_arr;
 
     in_file.open("/home/darryl/Development/kmerge/tests/208831/taxonomy.txt");
 
@@ -1288,7 +1107,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
 	getline(tokenizer, token, '\t');
 	if (i == 0) { // this is taxon                                                                                         
-	  path << "/208831/taxonomy/" << token;
+	  path << "/208831|1/taxonomy/" << token;
 	} else { // this is classification                                                                                     
 	  classification = token;
 	}
@@ -1303,45 +1122,15 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     }
 
     in_file.close();
-    /*
-    hashes_arr = new uint[dims[0]];
-
-    if (!(sample->getData("kmer_hash", hashes_arr, &params2.group_name[0]))) {
-      cerr << "Cannot access sample hashes" << endl;
-      exit(EXIT_FAILURE);
-    }
-    */
-    counts_arr = new uint[dims[0]];
-
-
-    if(!(sample->getData("count", counts_arr, &params2.group_name[0]))) {
-      cerr << "Cannot access sample counts" << endl;
-    }
 
     kmer1_count = 2147 /*AAAAA*/ + 1919 /*TTTTT*/;
     kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
-    /*
-    for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
-        kmer1_pos = pos;
-      }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
-        kmer2_pos = pos;
-      }
-    }
-   
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
-    REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
-    REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
-    */
+
     //AAAAA/TTTTT : 1130773752 
-    REQUIRE(counts_arr[1130773752] == kmer1_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer1_count) != counts_arr+num_hashes);
     //GCGAT/ATCGC : 1282497623
-    REQUIRE(counts_arr[1282497623] == kmer2_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer2_count) != counts_arr+num_hashes);
     
-    delete [] counts_arr;
-    //delete [] hashes_arr;
 
     in_file.open("/home/darryl/Development/kmerge/tests/209328/taxonomy.txt");
 
@@ -1355,7 +1144,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
         getline(tokenizer, token, '\t');
         if (i == 0) { // this is taxon                                                                                         
-          path << "/209328/taxonomy/" << token;
+          path << "/209328|2/taxonomy/" << token;
         } else { // this is classification                                                                                     
           classification = token;
         }
@@ -1370,47 +1159,17 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     }
     
     in_file.close();
-    /*
-    hashes_arr = new uint[dims[0]];
 
-    if (!(sample->getData("kmer_hash", hashes_arr, &params3.group_name[0]))) {
-      cerr << "Cannot access sample hashes" << endl;
-      exit(EXIT_FAILURE);
-    }
-    */
-    counts_arr = new uint[dims[0]];
-
-
-    if(!(sample->getData("count", counts_arr, &params3.group_name[0]))) {
-      cerr << "Cannot access sample counts" << endl;
-    }
-    
     kmer1_count = 9896 /*AAAAA*/ + 9505 /*TTTTT*/;
     kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
-    /*
-    for (pos = 0; pos < dims[0]; pos++) {
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
-	kmer1_pos = pos;
-      }
-      if (hashes_arr[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
-        kmer2_pos = pos;
-      }
-    }
-
-    REQUIRE(hashes_arr[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-    REQUIRE(hashes_arr[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
-    REQUIRE(counts_arr[kmer1_pos] == kmer1_count);
-    REQUIRE(counts_arr[kmer2_pos] == kmer2_count);
-    */
 
 
     //AAAAA/TTTTT : 1130773752
-    REQUIRE(counts_arr[1130773752] == kmer1_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer1_count) != counts_arr+num_hashes);
     //GCGAT/ATCGC : 1282497623
-    REQUIRE(counts_arr[1282497623] == kmer2_count);
+    REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer2_count) != counts_arr+num_hashes);
 
     delete [] counts_arr;
-    //delete [] hashes_arr;
 
     in_file.open("/home/darryl/Development/kmerge/tests/54095/taxonomy.txt");
 
@@ -1424,7 +1183,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 	std::string token;
         getline(tokenizer, token, '\t');
         if (i == 0) { // this is taxon                                                                                         
-          path << "/54095/taxonomy/" << token;
+          path << "/54095|0/taxonomy/" << token;
         } else { // this is classification                                                                                     
           classification = token;
 	}
@@ -1530,7 +1289,7 @@ TEST_CASE("AddTaxonomyInfoToHDF5File", "[HDF5Test]") {
 
   KMerge *kmerge = new KMerge(hdf5_filename, "lookup3", ".");
 
-  kmerge->add_taxonomy(group);
+  kmerge->add_taxonomy(group, group);
 
   delete kmerge;
 
