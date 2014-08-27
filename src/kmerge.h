@@ -10,9 +10,8 @@
 #include <dlib/logger.h> 
 #include "klib/kseq.h"
 #include <zlib.h>
-#include "cpp-btree/btree_map.h"
 #include "blosc_filter.h"
-
+#include <stx/btree_map>
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -45,6 +44,7 @@ struct param_struct {
   uint num_threads;
   uint priority;
   std::string lock_filename;
+  std::vector<std::string> serialized_files;
 } ;
 
 
@@ -64,8 +64,7 @@ class KMerge {
   ~KMerge();
   static std::string rev_comp(const std::string&);
   void build(param_struct&);
-  bool count_hashed_kmers_fasta(param_struct&, btree::btree_map<uint, uint>&);
-  bool count_hashed_kmers_fastq(param_struct&, btree::btree_map<uint, uint>&);
+  bool count_hashed_kmers(param_struct&);
   bool add_dataset(const uint, const uint*, param_struct&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&, const std::string&);
@@ -73,7 +72,7 @@ class KMerge {
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
-  bool add_hash(btree::btree_map<uint, uint>&, uint);
+  bool add_hash(stx::btree_map<uint, uint>&, uint);
   bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {
@@ -90,34 +89,18 @@ class KMerge {
       }
   };
 
-  class CountAndHashSeqFasta {
+
+  class CountAndHashSeqFastx {
   public:
 
     param_struct& params;
-    btree::btree_map<uint, uint>& hashed_counts;
-    std::string seq;
-    pthread_mutex_t& m;
 
     void operator() (long i) const;
 
-  CountAndHashSeqFasta( param_struct& params_, btree::btree_map<uint, uint>& hashed_counts_, const std::string seq_, pthread_mutex_t& m_) : params(params_), hashed_counts(hashed_counts_), seq(seq_), m(m_) {}
+  CountAndHashSeqFastx( param_struct& params_) : params(params_) {}
 
-    ~CountAndHashSeqFasta() {}
+    ~CountAndHashSeqFastx() {}
     };
-
-  class CountAndHashSeqFastq {
-  public:
-    
-    param_struct& params;
-    btree::btree_map<uint, uint>& hashed_counts;
-    pthread_mutex_t& m;
-    
-    void operator() (long i) const;
-
-  CountAndHashSeqFastq( param_struct& params_, btree::btree_map<uint, uint>& hashed_counts_, pthread_mutex_t& m_ ) : params(params_), hashed_counts(hashed_counts_), m(m_) {}
-
-    ~CountAndHashSeqFastq() {}
-  };
 
 };
 
