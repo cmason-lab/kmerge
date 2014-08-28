@@ -1,7 +1,7 @@
 SRC=/home/darryl/Development/kmerge/src
 HOME_DIR=/home/darryl
 DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
-CXX=g++ -std=c++11
+CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11
 CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
 
 CPPFLAGS += -I $(HOME_DIR)/fastbit-ibis1.3.8/win -I $(HOME_DIR)/fastbit-ibis1.3.8/include -D_NOMPI -DFQ_NOMPI -I $(HOME_DIR)/include -I -DFQ_NOMPI -I $(HOME_DIR)/fastquery-0.8.2.8/include -I $(DEVELOPMENT_INCLUDE_DIR) -I $(HOME_DIR)/hdf5-1.8.13/include
