@@ -12,6 +12,7 @@
 #include <zlib.h>
 #include "blosc_filter.h"
 #include <stx/btree_map>
+#include "cpp-btree/btree_map.h"
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -64,7 +65,7 @@ class KMerge {
   ~KMerge();
   static std::string rev_comp(const std::string&);
   void build(param_struct&);
-  bool count_hashed_kmers(param_struct&);
+  bool count_hashed_kmers(param_struct&, bool);
   bool add_dataset(const uint, const uint*, param_struct&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&, const std::string&);
@@ -72,7 +73,7 @@ class KMerge {
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
-  bool add_hash(stx::btree_map<uint, uint>&, uint);
+  bool add_hash(btree::btree_map<uint, uint>&, uint);
   bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {
@@ -94,10 +95,11 @@ class KMerge {
   public:
 
     param_struct& params;
+    bool print_status;
 
     void operator() (long i) const;
 
-  CountAndHashSeqFastx( param_struct& params_) : params(params_) {}
+  CountAndHashSeqFastx( param_struct& params_, bool print_status_) : params(params_), print_status(print_status_) {}
 
     ~CountAndHashSeqFastx() {}
     };
