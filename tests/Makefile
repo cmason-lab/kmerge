@@ -23,7 +23,7 @@ CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -lblosc #-L $(HOME_DIR)/hdf5-1.8.13/lib -lhdf5 -lhdf5_hl_cpp -lhdf5_cpp -lhdf5_hl
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -lblosc -L $(DEVELOPMENT_LIB_DIR) -lulib #-L $(HOME_DIR)/hdf5-1.8.13/lib -lhdf5 -lhdf5_hl_cpp -lhdf5_cpp -lhdf5_hl
 
 # House-keeping build targets.
 

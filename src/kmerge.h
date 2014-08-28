@@ -11,8 +11,8 @@
 #include "klib/kseq.h"
 #include <zlib.h>
 #include "blosc_filter.h"
-#include <stx/btree_map>
 #include "cpp-btree/btree_map.h"
+#include <ulib/hash_chain.h>
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -36,8 +36,6 @@ struct param_struct {
   uint k_val_start;
   uint k_val_end;
   std::string seq_filename;
-  std::string tmp_hashes_filename;
-  std::string tmp_counts_filename;
   std::string group_name;
   std::string compound_name;
   std::string hash_dataset_name;
@@ -45,7 +43,6 @@ struct param_struct {
   uint num_threads;
   uint priority;
   std::string lock_filename;
-  std::vector<std::string> serialized_files;
 } ;
 
 
@@ -65,7 +62,7 @@ class KMerge {
   ~KMerge();
   static std::string rev_comp(const std::string&);
   void build(param_struct&);
-  bool count_hashed_kmers(param_struct&, bool);
+  bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
   bool add_dataset(const uint, const uint*, param_struct&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&, const std::string&);
@@ -90,19 +87,20 @@ class KMerge {
       }
   };
 
-
-  class CountAndHashSeqFastx {
+  class CountAndHashSeq {
   public:
 
     param_struct& params;
+    ulib::chain_hash_map<uint, uint>& hashed_counts;
     bool print_status;
 
     void operator() (long i) const;
 
-  CountAndHashSeqFastx( param_struct& params_, bool print_status_) : params(params_), print_status(print_status_) {}
+  CountAndHashSeq( param_struct& params_, ulib::chain_hash_map<uint, uint>& hashed_counts_, bool print_status_) : params(params_), hashed_counts(hashed_counts_), print_status(print_status_) {}
 
-    ~CountAndHashSeqFastx() {}
+    ~CountAndHashSeq() {}
     };
+
 
 };
 

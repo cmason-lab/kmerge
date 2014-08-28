@@ -14,6 +14,7 @@
 #include "queryProcessor.h"
 #include "H5Cpp.h"
 #include "blosc_filter.h"
+#include <ulib/hash_chain.h>
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -56,6 +57,28 @@ T sum_pairs(T a, T b) {
   return std::make_pair(a.first, a.second + b.second);
 }
 
+TEST_CASE("ChainedHashMap", "ConcurrentTest") {
+  ulib::chain_hash_map<uint, uint> c_map(100000000);
+
+  c_map[0] = 0;
+  c_map[1] = 1;
+  c_map[2] = 2;
+  c_map[3] = 3;
+
+  uint i = 0;
+  for (ulib::chain_hash_map<uint,uint>::const_iterator iter = c_map.begin(); iter != c_map.end(); iter++) {
+    REQUIRE(c_map[i] == i);
+    i++;
+  }
+
+  c_map[0] += c_map[3];
+
+  REQUIRE(c_map[0] == c_map[3]);
+
+  REQUIRE(c_map[10] == 0);
+
+}
+
 
 TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   uint num_cols = 1;
@@ -64,7 +87,6 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   int r, i;
   const H5std_string ds_name("counts");
   const H5std_string file_name("matrix.h5");
-  uint key, value;
 
   /* Register the filter with the library */
   r = register_blosc(&version, &date);
@@ -111,15 +133,13 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
 
   uint hash;
   std::stringstream path;
-  btree::btree_map<uint, uint> hashed_counts;
+  ulib::chain_hash_map<uint,uint> hashed_counts(100000000);
   param_struct params;
 
   params.k_val_start = 5;
   params.k_val_end = 5;
   params.hdf5_filename = "dummy.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
-  params.tmp_hashes_filename = "";
-  params.tmp_counts_filename = "";
   params.group_name = "/test";
   params.hash_dataset_name =  "/test/kmer_hash";
   params.counts_dataset_name = "/test/count";
@@ -129,36 +149,20 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
 
   KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
   params.kmerge = kmerge;
-  bool success = kmerge->count_hashed_kmers(params, true);
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-  std::ifstream ifs;
- 
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-  REQUIRE(ifs.is_open() == true);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-    
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-
-  ifs.close();
 
   REQUIRE(hashed_counts.size() == 324);
 
   std::vector<uint> counts(MAX_UINT_VAL);
 
-  std::cout << "loading counts from btree_map" << std::endl;
-  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    counts[iter->first] = iter->second;
+  std::cout << "loading counts map" << std::endl;
+  for (ulib::chain_hash_map<uint,uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    counts[iter.key()] = iter.value();
   }
   std::cout << "Done" << std::endl;
 
   hashed_counts.clear();
-  btree::btree_map<uint, uint>().swap( hashed_counts );
 
   std::cout << "Writing data" << std::endl;
   dataset->write( &counts[0], H5::PredType::NATIVE_UINT, mem_space, file_space );
@@ -239,32 +243,18 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
 
   kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
   params.kmerge = kmerge;
-  success = kmerge->count_hashed_kmers(params, true);
+  success = kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-  REQUIRE(ifs.is_open() == true);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-    
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-
-  ifs.close();
 
   REQUIRE(hashed_counts.size() == 324);
 
   counts.resize(MAX_UINT_VAL);
 
-  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    counts[iter->first] = iter->second;
+  for (ulib::chain_hash_map<uint,uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    counts[iter.key()] = iter.value();
   }
 
   hashed_counts.clear();
-  btree::btree_map<uint, uint>().swap( hashed_counts );
 
   dataset->write( &counts[0], H5::PredType::NATIVE_UINT, mspace, fspace );
 
@@ -309,24 +299,19 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
     perror( "Error deleting file");
   }
 
-  if (remove("test_5.bin") != 0) {
-    perror( "Error deleting file");
-  }
 }
 
 
 TEST_CASE("StoreDenseCounts", "[HashTest]") {
   uint hash, key, value;
   std::stringstream path;
-  btree::btree_map<uint, uint> hashed_counts;
+  ulib::chain_hash_map<uint,uint> hashed_counts(100000000);
   param_struct params;
 
   params.k_val_start = 5;
   params.k_val_end = 5;
   params.hdf5_filename = "dense_data.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
-  params.tmp_hashes_filename = "";
-  params.tmp_counts_filename = "";
   params.group_name = "/test";
   params.hash_dataset_name =  "/test/kmer_hash";
   params.counts_dataset_name = "/test/count";
@@ -336,29 +321,15 @@ TEST_CASE("StoreDenseCounts", "[HashTest]") {
 
   KMerge *kmerge = new KMerge(params.hdf5_filename.c_str(), "lookup3", ".");
   params.kmerge = kmerge;
-  bool success = kmerge->count_hashed_kmers(params, true);
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-  std::ifstream ifs;
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-  REQUIRE(ifs.is_open() == true);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-    
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-
-  ifs.close();
 
   REQUIRE(hashed_counts.size() == 324);
 
   std::vector<uint> counts(MAX_UINT_VAL);
   
-  for (btree::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    counts[iter->first] = iter->second; 
+  for (ulib::chain_hash_map<uint,uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    counts[iter.key()] = iter.value(); 
   }
 
   REQUIRE(params.kmerge->add_dataset(params.counts_dataset_name, MAX_UINT_VAL, &counts[0], NULL) == true);
@@ -396,10 +367,6 @@ TEST_CASE("StoreDenseCounts", "[HashTest]") {
   }
   
   delete [] c_result;
-
-  if (remove("test_5.bin") != 0) {
-    perror( "Error deleting file");
-  }
 
   if (remove("dense_data.h5") != 0) {
     perror( "Error deleting file");
@@ -631,17 +598,15 @@ TEST_CASE("CountKmersInFastqFileBasic", "[HashTest]") {
 }
 
 TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
-  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts, holder, result;
+  std::map<uint, uint> jf_hashed_counts;
+  ulib::chain_hash_map<uint,uint> hashed_counts(100000000);
   param_struct params;
   std::vector<std::string> files;
-  uint key, value;
 
   params.k_val_start = 3;
   params.k_val_end = 7;
   params.hdf5_filename = "/home/darryl/Development/kmerge/tests/fasta.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
-  params.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/208831/hashes.bin";
-  params.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/208831/counts.bin";
   params.group_name = "/208831";
   params.hash_dataset_name =  "/208831/kmer_hash";
   params.counts_dataset_name = "/208831/count";
@@ -661,30 +626,8 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   params.kmerge = kmerge;
 
 
-  bool success = kmerge->count_hashed_kmers(params, true);
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-  std::ifstream ifs;
-
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    std::cout << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    REQUIRE(ifs.is_open() == true);
-	      
-    while (!ifs.eof()) {
-      ifs >> key;
-      ifs >> value;
-
-      hashed_counts[key] += value; // remove enclosing brackets
-    }
-
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    std::cout << "Finished adding " << *s_iter << std::endl;
-  }
 
   std::string seq, last = "";
   uint count;
@@ -707,24 +650,22 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
 
   REQUIRE(jf_hashed_counts.size() == hashed_counts.size());
   
-  for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
+  for (std::map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
     REQUIRE(hashed_counts[b_it->first] == b_it->second);
   }
 
 }
 
 TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
-  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts, holder, result;
+  ulib::chain_hash_map<uint,uint> hashed_counts(100000000);
+  btree::btree_map<uint, uint> jf_hashed_counts;
   param_struct params;
   std::vector<std::string> files;
-  uint key, value;
 
   params.k_val_start = 3;
   params.k_val_end = 7;
   params.hdf5_filename = "fastq.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
-  params.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/sample/hashes.bin";
-  params.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/sample/counts.bin";
   params.group_name = "/sample";
   params.hash_dataset_name =  "/sample/kmer_hash";
   params.counts_dataset_name = "/sample/count";
@@ -743,30 +684,8 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   params.kmerge = kmerge;
 
 
-  bool success = kmerge->count_hashed_kmers(params, false);
+  bool success = kmerge->count_hashed_kmers(params, hashed_counts, false);
   REQUIRE(success == true);
-
-  std::ifstream ifs;
-
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    std::cout << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    REQUIRE(ifs.is_open() == true);
-	      
-    while (!ifs.eof()) {
-      ifs >> key;
-      ifs >> value;
-
-      hashed_counts[key] += value; // remove enclosing brackets
-    }
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    std::cout << "Finished adding " << *s_iter << std::endl;
-  }
-
 
 
   std::string seq, last = "";
@@ -797,74 +716,41 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
 }
 
 
-
-
-TEST_CASE("CountHashedKmersParallelLockFreeFasta", "[HashTest]") {
-
-
+TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
+  ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
   int l;
-  btree::btree_map<uint, uint> hashed_counts;
   KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
   param_struct params;
-  std::ifstream ifs;
-  uint key, value;
   
   params.k_val_start = 3;
   params.k_val_end = 11;
   params.hdf5_filename = "problem.h5";
   params.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/208831.fasta.gz";
-  params.tmp_hashes_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/hashes.bin";
-  params.tmp_counts_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/counts.bin";
   params.group_name = "/208831";
   params.hash_dataset_name =  "/208831/kmer_hash";
   params.counts_dataset_name = "/208831/count";
   params.kmerge = kmerge;
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   
-  KMerge::CountAndHashSeqFastx func(params, true);
+  KMerge::CountAndHashSeq func(params, hashed_counts, true);
   dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
     
   delete kmerge;
-    
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    std::cout << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    REQUIRE(ifs.is_open() == true);
-	      
-    while (!ifs.eof()) {
-      ifs >> key;
-      ifs >> value;
-
-      hashed_counts[key] += value; // remove enclosing brackets
-    }
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    std::cout << "Finished adding " << *s_iter << std::endl;
-  }
- 
   
   REQUIRE(hashed_counts.size() == 1591922);
   
 
 }
 
-TEST_CASE("CountHashedKmersParallelLockFreeFastq", "[HashTest]") {
-
-  btree::btree_map<uint, uint> hashed_counts, holder, result;
+TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
+  ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
   KMerge *kmerge = new KMerge("dummy.h5", "lookup3", ".");
   param_struct params;
-  std::ifstream ifs;
-  uint key, value;
 
   params.k_val_start = 3;
   params.k_val_end = 7;
   params.hdf5_filename = "";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
-  params.tmp_hashes_filename = "";
-  params.tmp_counts_filename = "";
   params.group_name = "/sample";
   params.hash_dataset_name =  "/sample/kmer_hash";
   params.counts_dataset_name = "/sample/count";
@@ -872,34 +758,13 @@ TEST_CASE("CountHashedKmersParallelLockFreeFastq", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
 
-  KMerge::CountAndHashSeqFastx func(params, false);
+  KMerge::CountAndHashSeq func(params, hashed_counts, false);
   dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
 
   delete kmerge;
 
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    std::cout << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    REQUIRE(ifs.is_open() == true);
-	      
-    while (!ifs.eof()) {
-      ifs >> key;
-      ifs >> value;
-
-      hashed_counts[key] += value; // remove enclosing brackets
-    }
-
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    std::cout << "Finished adding " << *s_iter << std::endl;
-  }
-
   REQUIRE(hashed_counts.size() == 8727);
 }
-
 
 TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") {
   std::string test_seq("ACTAG");
@@ -913,59 +778,10 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   delete kmerge;
 }
 
-TEST_CASE("SerializeAndDeserializeVectors", "[SerializeTest]") {
-  std::map<uint, uint> m;
-  std::vector<uint> hashes, counts;
-  
-  m[0] = 4;
-  m[1] = 1;
-  m[2] = 0;
-  m[3] = 2;
-
-  for (std::map<uint, uint>::const_iterator m_iter = m.begin(); m_iter != m.end(); m_iter++) {
-    hashes.push_back(m_iter->first);
-    counts.push_back(m_iter->second);
-  }
-
-  ofstream out_hashes_file("tmp_hashes.bin", ios::out | ios::binary), out_counts_file("tmp_counts.bin", ios::out | ios::binary);
-  try {
-    dlib::serialize(hashes, out_hashes_file);
-    dlib::serialize(counts, out_counts_file);
-  } catch (dlib::serialization_error& e) {
-    cout << "Unable to serialize data" << endl;
-  }
-
-  std::vector<uint>().swap( hashes );
-  std::vector<uint>().swap( counts );
-
-  out_hashes_file.close();
-  out_counts_file.close();
-
-  ifstream in_hashes_file("tmp_hashes.bin", ios::in | ios::binary), in_counts_file("tmp_counts.bin", ios::in | ios::binary);
-
-  try {
-    dlib::deserialize(hashes, in_hashes_file);
-    dlib::deserialize(counts, in_counts_file);
-  } catch (dlib::serialization_error& e) {
-    cout << "Unable to deserialize data" << endl;
-  }
-
-  in_hashes_file.close();
-  in_hashes_file.close();
-
-  remove("tmp_hashes.bin");
-  remove("tmp_counts.bin");
-
-  for (uint i = 0; i < m.size(); i++) {
-    REQUIRE(m[hashes[i]] == counts[i]);
-  }
-
-}
-
 TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
   std::vector<uint> hashes;
   std::vector<uint> counts;
-  btree::btree_map<uint, uint> hashed_counts;
+  ulib::chain_hash_map<uint, uint> hashed_counts(1000000);
   const string kmer1("AAAAA");
   const string kmer2("TTTTT");
   const uint kmer1_count = 84;
@@ -979,15 +795,12 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
 
   std::vector<uint64_t> dims;
   param_struct params;
-  uint key, value;
 
 
   params.k_val_start = 5;
   params.k_val_end = 5;
   params.hdf5_filename = "/home/darryl/Development/kmerge/tests/parse_example.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
-  params.tmp_hashes_filename = "hashes.bin";
-  params.tmp_counts_filename = "counts.bin";
   params.group_name = "/org1";
   params.hash_dataset_name =  "/org1/kmer_hash";
   params.counts_dataset_name = "/org1/count";
@@ -1002,33 +815,15 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     KMerge* kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
     params.kmerge = kmerge;
 
-    bool success = kmerge->count_hashed_kmers(params, true);
+    bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
     REQUIRE(success == true);
-
-    std::ifstream ifs;
-    
-    ifs.open(params.serialized_files[0], std::ifstream::binary);
-
-    REQUIRE(ifs.is_open() == true);
-	      
-    while (!ifs.eof()) {
-      ifs >> key;
-      ifs >> value;
-
-      hashed_counts[key] += value; // remove enclosing brackets
-    }
-
-    ifs.close();
     REQUIRE(hashed_counts.size() == 324);
 
-    //make sure hashes are sorted and store in vectors
-    for (btree::btree_map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
-      if (m_iter != hashed_counts.begin()) {
-        REQUIRE(m_iter->first > last);
-      }
-      hashes.push_back(m_iter->first);
-      counts.push_back(m_iter->second);
-      last = m_iter->first;
+    //store hashes in vectors
+    for (ulib::chain_hash_map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
+      hashes.push_back(m_iter.key());
+      counts.push_back(m_iter.value());
+      last = m_iter.key();
     }
     
     REQUIRE(hashes.size() == 324);
@@ -1075,9 +870,6 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     }
 
     for (pos = 0; pos < dims[0]; pos++) {
-      if (pos != 0) {
-        REQUIRE(hashes_arr[pos] > last); //make sure sorting still intact
-      }
       REQUIRE(hashes_arr[pos] == hashes[pos]);
       REQUIRE(counts_arr[pos] == counts[pos]);
       last = hashes_arr[pos];
@@ -1087,10 +879,6 @@ TEST_CASE("ParseKmerCountsAndCreateHDF5", "[HashTest]") {
     delete hashes_arr;
     delete counts_arr;
     delete sample;
-
-    if (remove("org1_5.bin") != 0) {
-      perror( "Error deleting file");
-    }
 
     if (remove(params.hdf5_filename.c_str()) != 0) {
       perror( "Error deleting file");
@@ -1111,8 +899,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
   params.k_val_end = 7;
   params.hdf5_filename = "thread_fastq.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
-  params.tmp_hashes_filename = "";
-  params.tmp_counts_filename = "";
   params.group_name = "/sample";
   params.hash_dataset_name =  "/sample/kmer_hash";
   params.counts_dataset_name = "/sample/count";
@@ -1189,8 +975,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.lock_filename =  params3.hdf5_filename + std::string(".lck");
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
-  params1.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/208831/hashes.bin";
-  params1.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/208831/counts.bin";
   params1.group_name = "/208831";
   params1.hash_dataset_name =  "/208831/kmer_hash";
   params1.counts_dataset_name = "/208831/count";
@@ -1198,8 +982,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params1.priority = 1;
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
-  params2.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/209328/hashes.bin";
-  params2.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/209328/counts.bin";
   params2.group_name = "/209328";
   params2.hash_dataset_name = "/209328/kmer_hash";
   params2.counts_dataset_name = "/209328/count";
@@ -1207,8 +989,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params2.priority = 2;
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
-  params3.tmp_hashes_filename = "/home/darryl/Development/kmerge/tests/54095/hashes.bin";
-  params3.tmp_counts_filename = "/home/darryl/Development/kmerge/tests/54095/counts.bin";
   params3.group_name = "/54095";
   params3.hash_dataset_name = "/54095/kmer_hash";
   params3.counts_dataset_name = "/54095/count";
@@ -1265,9 +1045,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
     kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
     kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
-    for (uint i = 0; i < num_hashes; i++) {
-      std::cout << i << ": " << counts_arr[i];
-    }
 
     //AAAAA/TTTTT : 1130773752
     REQUIRE(std::find(counts_arr, counts_arr+num_hashes,kmer1_count) != counts_arr+num_hashes);
@@ -1392,98 +1169,55 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
 }
 
 TEST_CASE("TestHashingFunctions", "[HashTest]") {
-  btree::btree_map<uint, uint> hashed_counts;
-  btree::btree_map<uint, uint>::const_iterator m_iter;
-  uint key, value;
+  ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
+  ulib::chain_hash_map<uint, uint>::const_iterator m_iter;
   param_struct params;
 
   params.k_val_start = 5;
   params.k_val_end = 5;
   params.hdf5_filename = "hash.h5";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
-  params.tmp_hashes_filename = "hashes.bin";
-  params.tmp_counts_filename = "counts.bin";
   params.group_name = "/org1";
   params.hash_dataset_name =  "/org1/kmer_hash";
   params.counts_dataset_name = "/org1/count";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
   params.kmerge = new KMerge(params.hdf5_filename, "lookup3", ".");
-  bool success = params.kmerge->count_hashed_kmers(params, true);
+  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-  std::ifstream ifs;
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-    
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-
-  ifs.close();
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
     // make sure we are getting unsigned 32-bit integers back
-    REQUIRE(m_iter->first >= 0);
-    REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
+    REQUIRE(m_iter.key() >= 0);
+    REQUIRE(m_iter.value() <= (uint) MAX_UINT_VAL);
   }
   hashed_counts.clear();
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "spooky", ".");
-  success = params.kmerge->count_hashed_kmers(params, true);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-
-  ifs.close();
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
     // make sure we are getting unsigned 32-bit integers back
-    REQUIRE(m_iter->first >= 0);
-    REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
+    REQUIRE(m_iter.key() >= 0);
+    REQUIRE(m_iter.value() <= (uint) MAX_UINT_VAL);
   }
   hashed_counts.clear();
   delete params.kmerge;
 
   params.kmerge = new KMerge(params.hdf5_filename, "city", ".");
-  success = params.kmerge->count_hashed_kmers(params, true);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
-
-
-  ifs.open(params.serialized_files[0], std::ifstream::binary);
-	      
-  while (!ifs.eof()) {
-    ifs >> key;
-    ifs >> value;
-    
-    hashed_counts[key] += value; // remove enclosing brackets
-  }
-  ifs.close();
 
 
   for(m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
     // make sure we are getting unsigned 32-bit integers back
-    REQUIRE(m_iter->first >= 0);
-    REQUIRE(m_iter->first <= (uint) MAX_UINT_VAL);
+    REQUIRE(m_iter.key() >= 0);
+    REQUIRE(m_iter.value() <= (uint) MAX_UINT_VAL);
   }
   hashed_counts.clear();
   delete params.kmerge;
-
-  if (remove("org1_5.bin") != 0) {
-    perror( "Error deleting file");
-  }
 
 }
 
