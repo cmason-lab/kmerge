@@ -107,7 +107,7 @@ int main(int argc, char const ** argv) {
       priority = 1;
     }
   }
-  stringstream seq_filename, file_loc, dataset_name, tmp_hashes_filename, tmp_counts_filename;
+  stringstream seq_filename, file_loc, dataset_name;
   vector<uint> hashes;
   vector<uint> counts;
   std::string group_name("");
@@ -129,8 +129,6 @@ int main(int argc, char const ** argv) {
     dataset_name.str("");
     params.hash_dataset_name = "/sample/kmer_hash";
     params.counts_dataset_name = "/sample/count";
-    params.tmp_hashes_filename = ""; 
-    params.tmp_counts_filename = "";
     params.num_threads = parallel_for_threads;
     kmerge->build(params);
   } else {
@@ -163,12 +161,6 @@ int main(int argc, char const ** argv) {
 	      dataset_name.str("");
 	      dataset_name << "/" << s_org << "/" << "count";
 	      params.counts_dataset_name = dataset_name.str();
-	      tmp_hashes_filename.str("");
-	      tmp_hashes_filename << seq_dir << "/" << s_org << "/" << "hashes.bin";
-	      params.tmp_hashes_filename = tmp_hashes_filename.str();
-	      tmp_counts_filename.str("");
-	      tmp_counts_filename << seq_dir << "/" << s_org << "/" << "counts.bin";
-	      params.tmp_counts_filename = tmp_counts_filename.str();
 	      params.num_threads = parallel_for_threads;
 	      params.priority = priority;
 	      KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
