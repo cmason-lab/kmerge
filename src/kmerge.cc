@@ -149,13 +149,12 @@ bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& p
     H5::DataSpace dataspace = dataset->getSpace();
     rank = dataspace.getSimpleExtentNdims();
 
-    hsize_t dims_out[2];
+    hsize_t dims_out[1];
     int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-    hsize_t offset[2];
-    offset[0] = 0;
-    offset[1] = dims_out[1];
-    params.compound_name = params.group_name + std::string("|") + std::to_string(dims_out[1]);
-    dims_out[1]++; // extend dataset by 1                                                                                                                                                                                                      
+    hsize_t offset[1];
+    offset[0] = dims_out[0];
+    params.compound_name = params.group_name + std::string("|") + std::to_string(dims_out[0]/MAX_UINT_VAL);
+    dims_out[0] = ((dims_out[0]/MAX_UINT_VAL)+1)*MAX_UINT_VAL;; // extend dataset by MAX_UINT_VAL                                                                                                                                                                                                      
     dataset->extend( dims_out );
 
     DataSpace fspace = dataset->getSpace();
@@ -170,11 +169,11 @@ bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& p
     /*
      * Create property list for a dataset and set up fill values. 
      */
-    rank = 2;
+    rank = 1;
     uint fillvalue = 0;   /* Fill value for the dataset */
     H5::DSetCreatPropList plist;
-    hsize_t max_dims[2] = {data_size, H5S_UNLIMITED};
-    hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, num_cols};
+    hsize_t max_dims[1] = {H5S_UNLIMITED};
+    hsize_t chunk_dims[1] = {KMerge::CHUNK_ROW_SIZE};
 
     cd_values[4] = 1;       /* compression level */
     cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
@@ -304,7 +303,7 @@ T sum_pairs(T a, T b) {
 
 void KMerge::build(param_struct& params) {
   stringstream file_name, file_loc;
-  ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
+  ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
@@ -359,7 +358,7 @@ void KMerge::build(param_struct& params) {
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
-  ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
+  ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {

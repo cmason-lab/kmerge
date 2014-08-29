@@ -57,6 +57,7 @@ class KMerge {
 
  public:
   static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
+  static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
 
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();

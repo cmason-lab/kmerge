@@ -98,11 +98,11 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   /*                              
    * Create property list for a dataset and set up fill values. 
    */
-  uint rank = 2;
+  uint rank = 1;
   uint fillvalue = 0;   /* Fill value for the dataset */
   H5::DSetCreatPropList plist;
-  hsize_t max_dims[2] = {MAX_UINT_VAL, H5S_UNLIMITED};
-  hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, 1};
+  hsize_t max_dims[1] = {H5S_UNLIMITED};
+  hsize_t chunk_dims[1] = {KMerge::CHUNK_ROW_SIZE};
 
   cd_values[4] = 1;       /* compression level */
   cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
@@ -112,12 +112,12 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   plist.setFillValue(H5::PredType::NATIVE_UINT, &fillvalue);
   plist.setFilter(FILTER_BLOSC, H5Z_FLAG_OPTIONAL, 7, cd_values);
   plist.setShuffle();
-  plist.setFletcher32();
+  //plist.setFletcher32();
 
   /* 
    * Create dataspace for the dataset                   
    */
-  const hsize_t data_dims[2] = {MAX_UINT_VAL, num_cols}; 
+  const hsize_t data_dims[1] = {MAX_UINT_VAL}; 
                                                                                                      
   H5::DataSpace file_space( rank, data_dims, max_dims);
 
@@ -184,22 +184,18 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   // test that search does not return incorrect values                                                                                                                                                                                             
 
   //find coordinates of values of interest                                                                                                                                                                                                         
-  uint hashes_arr[] = {1022408118, 0, 1043881921, 0, 1045475391, 0, 1049435108, 0, 1130773752, 0};
-  //uint hashes_arr[] = {1022408118, 1043881921, 1045475391, 1049435108, 1130773752};
+  uint64_t hashes_arr[] = {1022408118+0*MAX_UINT_VAL, 1043881921+0*MAX_UINT_VAL, 1045475391+0*MAX_UINT_VAL, 1049435108+0*MAX_UINT_VAL, 1130773752+0*MAX_UINT_VAL};
   // test that search does not return incorrect values                                                                                                                                                                                             
-  std::vector<uint64_t> coords(hashes_arr, hashes_arr + 10);
-  //std::vector<uint64_t> coords(hashes_arr, hashes_arr + 5);
+  std::vector<uint64_t> coords(hashes_arr, hashes_arr + 5);
   uint counts_arr[] = {1, 1, 1, 4, 97};
   std::vector<uint> freq(counts_arr, counts_arr + 5);
 
   coords.push_back(1); // count = 0
-  coords.push_back(0); // count = 0
 
   coords.push_back(10); // count = 0
-  coords.push_back(0); // count = 0
 
   //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
-  uint num_hashes = coords.size() / 2;
+  uint num_hashes = coords.size();
 
   uint* c_result = new uint[num_hashes];
   query_processor->getSelectedData("counts", coords, c_result, "/");
@@ -223,18 +219,17 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
   H5::DataSpace dataspace = dataset->getSpace();
   rank = dataspace.getSimpleExtentNdims();
 
-  hsize_t dims_out[2];
+  hsize_t dims_out[1];
   int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
   REQUIRE(dims_out[0] == MAX_UINT_VAL);
-  REQUIRE(dims_out[1] == 1);
-  hsize_t offset[2];
-  offset[0] = 0;
-  offset[1] = dims_out[1];
-  dims_out[1]++; // extend dataset by 1
-  dataset->extend( dims_out );
+  hsize_t offset[1];
+  offset[0] = dims_out[0];
+  dims_out[0] = ((dims_out[0]/MAX_UINT_VAL)+1)*MAX_UINT_VAL;
+  dataset->extend( dims_out ); // extend dataset by MAX_UINT_VAL
 
   DataSpace fspace = dataset->getSpace();
-
+  ndims = fspace.getSimpleExtentDims( dims_out, NULL);
+  REQUIRE(dims_out[0] == MAX_UINT_VAL*2);
 
   fspace.selectHyperslab( H5S_SELECT_SET, data_dims, offset );
   DataSpace mspace( rank, data_dims );
@@ -272,12 +267,12 @@ TEST_CASE("WriteMatrixToHDF5File", "HDF5Test") {
 
   // test that search does not return incorrect values
   //find coordinates of values of interest 
-  uint hashes_arr2[] = {1022408118, 0, 1043881921, 0, 1045475391, 0, 1049435108, 0, 1130773752, 0, 1022408118, 1, 1043881921, 1, 1045475391, 1, 1049435108, 1, 1130773752, 1};
+  uint64_t hashes_arr2[] = {1022408118+0*MAX_UINT_VAL, 1043881921+0*MAX_UINT_VAL, 1045475391+0*MAX_UINT_VAL, 1049435108+0*MAX_UINT_VAL, 1130773752+0*MAX_UINT_VAL, 1022408118+1*MAX_UINT_VAL, 1043881921+1*MAX_UINT_VAL, 1045475391+1*MAX_UINT_VAL, 1049435108+1*MAX_UINT_VAL, 1130773752+1*MAX_UINT_VAL};
 
-  std::vector<uint64_t> coords2(hashes_arr2, hashes_arr2 + 20);
+  std::vector<uint64_t> coords2(hashes_arr2, hashes_arr2 + 10);
 
   //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
-  num_hashes = coords2.size() / 2;
+  num_hashes = coords2.size();
 
   c_result = new uint[num_hashes];
   query_processor->getSelectedData("counts", coords2, c_result, "/");
@@ -1023,18 +1018,17 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
       cerr << "Cannot access sample variable information."  << endl;
     }
 
-    REQUIRE(dims[0] == MAX_UINT_VAL);
-    REQUIRE(dims[1] == 3);
+    REQUIRE(dims[0] == MAX_UINT_VAL*3);
 
     QueryProcessor* query_processor = new QueryProcessor(params1.hdf5_filename, FQ::FQ_HDF5);
 
     //find coordinates of values of interest 
-    uint hashes_arr[] = {1130773752, 0, 1282497623, 0, 1130773752, 1, 1282497623, 1, 1130773752, 2, 1282497623, 2};
+    uint64_t hashes_arr[] = {1130773752+0*MAX_UINT_VAL, 1282497623+0*MAX_UINT_VAL, 1130773752+1*MAX_UINT_VAL, 1282497623+1*MAX_UINT_VAL, 1130773752+2*MAX_UINT_VAL, 1282497623+2*MAX_UINT_VAL};
 
-    std::vector<uint64_t> coords(hashes_arr, hashes_arr + 12);
+    std::vector<uint64_t> coords(hashes_arr, hashes_arr + 6);
 
     //use returned coordinates from above to get hashes from "kmer_hash" and counts from "count"
-    uint num_hashes = coords.size() / 2;
+    uint num_hashes = coords.size();
 
     uint* counts_arr = new uint[num_hashes];
     query_processor->getSelectedData("counts", coords, counts_arr, "/");
