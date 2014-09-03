@@ -48,4 +48,4 @@ kmerge_unittest.o : $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(DEVELOPMENT_INCLUDE
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(LDFLAGS)
 
 blosc_filter.o:
-	gcc -Wall -Wextra -I/home/darryl/include -c $(HOME_DIR)/include/blosc_filter.c -o $@ -I/home/darryl/include -I/home/darryl/hdf5-1.8.13/include/ -L /home/darryl/hdf5-1.8.13/lib/ -lhdf5 -L/home/darryl/lib -lblosc
+	$(HOME_DIR)/hdf5-1.8.13/bin/h5cc -O3 -msse2 -Wall -Wextra -I/home/darryl/include -c $(HOME_DIR)/include/blosc_filter.c -o $@ -I/home/darryl/include -L/home/darryl/lib -lblosc -lpthread
