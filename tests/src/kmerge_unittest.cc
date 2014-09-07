@@ -15,6 +15,9 @@
 #include "H5Cpp.h"
 #include "blosc_filter.h"
 #include <ulib/hash_chain.h>
+#include "fastpfor/codecfactory.h"
+#include "fastpfor/deltautil.h"
+#include "leveldb/db.h"
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -55,6 +58,114 @@ int compare_first(T a, T b) {
 template<class T> 
 T sum_pairs(T a, T b) { 
   return std::make_pair(a.first, a.second + b.second);
+}
+
+
+TEST_CASE("CompressHashesTest", "CompressionTest") {
+  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
+  size_t N = 10 * 1000;
+  std::vector<uint32_t> mydata(N);
+  for(uint32_t i = 0; i < N;i += 150) mydata[i] = i;
+
+  std::vector<uint32_t> compressed_output(N+1024);
+  size_t compressedsize = compressed_output.size();
+  codec.encodeArray(mydata.data(), mydata.size(),
+		    compressed_output.data(), compressedsize);
+
+  compressed_output.resize(compressedsize);
+  compressed_output.shrink_to_fit();
+
+  std::cout<<std::setprecision(3);
+  std::cout<<"You are using " << 32.0 * static_cast<double>(compressed_output.size()) /
+    static_cast<double>(mydata.size()) <<" bits per integer. "<<std::endl;
+  
+
+  std::vector<uint32_t> mydataback(N);
+  size_t recoveredsize = mydataback.size();
+
+  codec.decodeArray(compressed_output.data(),
+		    compressed_output.size(), mydataback.data(), recoveredsize);
+  mydataback.resize(recoveredsize);
+
+  for (uint i = 0; i <= mydata.size(); i++) {
+    REQUIRE(mydata[i] == mydataback[i]);
+  }
+
+}
+
+TEST_CASE("LevelDBBasicsTest", "HashStorageTest") {
+  std::string key1("test"), value;
+  uint value_out = 1, value_in;
+  std::stringstream ss_in, ss_out;
+  dlib::serialize(value_out, ss_out);
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
+  REQUIRE(status.ok() == true);
+
+  leveldb::Status s = db->Put(leveldb::WriteOptions(), key1, ss_out.str());
+  REQUIRE(s.ok() == true);
+  s = db->Get(leveldb::ReadOptions(), key1, &value);
+  REQUIRE(s.ok() == true);
+  ss_in << value;
+  dlib::deserialize(value_in, ss_in);
+  REQUIRE(value_in == 1);
+  delete db;
+
+  system("rm -r ./testdb");
+}
+
+TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
+  std::string key1("test"), value;
+  std::stringstream ss_in, ss_out;
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
+  size_t N = 10 * 1000;
+  std::vector<uint32_t> mydata(N);
+  for(uint32_t i = 0; i < N;i += 150) mydata[i] = i;
+
+  std::vector<uint32_t> compressed_output(N+1024), data_in;
+  size_t compressedsize = compressed_output.size();
+  codec.encodeArray(mydata.data(), mydata.size(),
+		    compressed_output.data(), compressedsize);
+
+  compressed_output.resize(compressedsize);
+  compressed_output.shrink_to_fit();
+
+  dlib::serialize(compressed_output, ss_out);
+  
+  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
+  REQUIRE(status.ok() == true);
+
+  leveldb::Status s = db->Put(leveldb::WriteOptions(), key1, ss_out.str());
+  REQUIRE(s.ok() == true);
+
+
+  s = db->Get(leveldb::ReadOptions(), key1, &value);
+  REQUIRE(s.ok() == true);
+  ss_in << value;
+  dlib::deserialize(data_in, ss_in);
+  
+
+  std::vector<uint32_t> mydataback(N);
+  size_t recoveredsize = mydataback.size();
+
+  codec.decodeArray(data_in.data(),
+		    data_in.size(), mydataback.data(), recoveredsize);
+  mydataback.resize(recoveredsize);
+
+  for (uint i = 0; i <= mydata.size(); i++) {
+    REQUIRE(mydata[i] == mydataback[i]);
+  }
+
+  delete db;
+
+  system("rm -r ./testdb");
+
 }
 
 TEST_CASE("ChainedHashMap", "ConcurrentTest") {

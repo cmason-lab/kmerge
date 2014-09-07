@@ -102,6 +102,5 @@ class KMerge {
     ~CountAndHashSeq() {}
     };
 
-
 };
 

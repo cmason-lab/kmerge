@@ -19,11 +19,14 @@ CXXFLAGS += -g -Wall -Wextra $(OPT) -DDLIB_NO_GUI_SUPPORT -pthread -w
 # created to the list.
 TESTS = kmerge_unittest
 
-CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11
+CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11 -mssse3
+
 
 # libraries to include
 
-LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -lblosc -L $(DEVELOPMENT_LIB_DIR) -lulib #-L $(HOME_DIR)/hdf5-1.8.13/lib -lhdf5 -lhdf5_hl_cpp -lhdf5_cpp -lhdf5_hl
+LDFLAGS+=-L $(HOME_DIR)/fastquery-0.8.2.8/lib -lfastquery_nompi -lm -L $(HOME_DIR)/fastbit-ibis1.3.8/lib -lfastbit -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -lblosc -L $(DEVELOPMENT_LIB_DIR) -lulib -lleveldb -lpthread
+
+FASTPFORBINARIES= $(DEVELOPMENT_LIB_DIR)/bitpacking.o $(DEVELOPMENT_LIB_DIR)/bitpackingaligned.o $(DEVELOPMENT_LIB_DIR)/bitpackingunaligned.o $(DEVELOPMENT_LIB_DIR)/simdbitpacking.o  $(DEVELOPMENT_LIB_DIR)/simdunalignedbitpacking.o
 
 # House-keeping build targets.
 
@@ -33,7 +36,7 @@ clean :
 	rm -f $(TESTS) *.o
 
 kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o blosc_filter.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ $(FASTPFORBINARIES) -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROGRAM_SRC_DIR)/kmerge.cc -o $@ $(LDFLAGS)

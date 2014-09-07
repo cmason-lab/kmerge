@@ -435,3 +435,4 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
   }
   params.kmerge->dlog << dlib::LINFO << "Parsed " << counter << " hashes from sequence(s) in " << params.group_name << " (k = " << k << ")";
 }
+
