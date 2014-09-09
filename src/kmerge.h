@@ -3,21 +3,13 @@
 #include <map>
 #include <iostream>
 #include <pthread.h>
-#include "H5Cpp.h"
-#include "fq.h"
-#include "hdf5file.h"
 #include "SpookyV2.h"
 #include <dlib/logger.h> 
 #include "klib/kseq.h"
 #include <zlib.h>
-#include "blosc_filter.h"
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
 #include "leveldb/db.h"
-
-#ifndef H5_NO_NAMESPACE
-using namespace H5;
-#endif
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -34,14 +26,11 @@ class KMerge;
 struct param_struct {
   KMerge * kmerge;
   std::string db_filename;
-  std::string hdf5_filename;
   uint k_val_start;
   uint k_val_end;
   std::string seq_filename;
   std::string group_name;
   std::string compound_name;
-  std::string hash_dataset_name;
-  std::string counts_dataset_name;
   uint num_threads;
   uint priority;
   std::string lock_filename;
@@ -50,10 +39,8 @@ struct param_struct {
 
 class KMerge {
  private:
-  HDF5 *hdf5_file;
   HashEnumType hash_type;
   std::string dir;
-  static pthread_mutex_t mutex;
   dlib::logger dlog;
   std::string filename;
 
@@ -71,9 +58,7 @@ class KMerge {
   bool add_dataset_size(uint, const std::string&);
   bool add_dataset(const std::vector<uint>&, const std::string&);
   bool add_dataset(const uint, const uint*, param_struct&);
-  bool add_dataset(const std::string, uint, const uint*, HDF5*);
   bool add_taxonomy(const std::string&);
-  bool add_taxonomy(const std::string&, const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);

@@ -11,13 +11,13 @@ using namespace std;
 int main(int argc, char const ** argv) {
   dlib::command_line_parser parser;
 
-  parser.add_option("o","HDF5 file name", 1);
+  parser.add_option("o","Hash database file name", 1);
   parser.add_option("k", "Start and end k-mer values", 2);
   parser.add_option("d", "Location of sequences and taxonomy directories", 1);
   parser.add_option("i", "Location of single sequence file", 1);
   parser.add_option("t", "Max number of threads to use", 1);
   parser.add_option("f", "Hash function to use for k-mers", 1);
-  parser.add_option("p", "Lock priority for HDF5 file name", 1);
+  parser.add_option("p", "Lock priority for database file name", 1);
   parser.add_option("h","Display this help message.");
 
 
@@ -55,7 +55,7 @@ int main(int argc, char const ** argv) {
  
   // make sure one of the c or d options was given
   if (!parser.option("o")) {
-    std::cerr << "Error in command line:\n   You must specify an hdf5 output file" << std::endl;
+    std::cerr << "Error in command line:\n   You must specify an database output filename" << std::endl;
     std::cerr << "\nTry the -h option for more information." << std::endl;
     return 0;
   }
@@ -63,10 +63,10 @@ int main(int argc, char const ** argv) {
 
   uint k_val_start = 0;
   uint k_val_end = 0;
-  std::string hdf5_filename, seq_dir("."), hash_func("lookup3"), in_file;
+  std::string db_filename, seq_dir("."), hash_func("lookup3"), in_file;
   uint num_threads = 1, max_threads = 0, parallel_for_threads = 1, priority = 1;
 
-  hdf5_filename = parser.option("o").argument();
+  db_filename = parser.option("o").argument();
   k_val_start = atoi(parser.option("k").argument(0).c_str());
   k_val_end = atoi(parser.option("k").argument(1).c_str());
 
@@ -107,6 +107,7 @@ int main(int argc, char const ** argv) {
       priority = 1;
     }
   }
+
   stringstream seq_filename, file_loc, dataset_name;
   vector<uint> hashes;
   vector<uint> counts;
@@ -117,18 +118,16 @@ int main(int argc, char const ** argv) {
   KMerge *kmerge;
 
   if (parser.option("i")) {
-    kmerge = new KMerge(hdf5_filename, hash_func, "");
+    kmerge = new KMerge(db_filename, hash_func, "");
     param_struct params;
     params.kmerge = kmerge;
-    params.hdf5_filename = hdf5_filename;
+    params.db_filename = db_filename;
     params.k_val_start = k_val_start;
     params.k_val_end = k_val_end;
-    params.group_name = "/sample";
+    params.group_name = "sample";
     seq_filename.str("");
     params.seq_filename = in_file;
     dataset_name.str("");
-    params.hash_dataset_name = "/sample/kmer_hash";
-    params.counts_dataset_name = "/sample/count";
     params.num_threads = parallel_for_threads;
     kmerge->build(params);
   } else {
@@ -138,7 +137,7 @@ int main(int argc, char const ** argv) {
     vector<KMerge::BuilderTask*> task_ptrs;
     dlib::thread_pool tp(num_threads);
     dirp = opendir(seq_dir.c_str());
-    kmerge = new KMerge(hdf5_filename, hash_func, seq_dir);
+    kmerge = new KMerge(db_filename, hash_func, seq_dir);
     while ((dp = readdir(dirp)) != NULL) {
       if(stat(dp->d_name, &st) == 0) {
 	if (S_ISDIR(st.st_mode)) {
@@ -147,20 +146,14 @@ int main(int argc, char const ** argv) {
 	    try {
 	      param_struct params;
 	      params.kmerge = kmerge;
-	      params.hdf5_filename = hdf5_filename;
-	      params.lock_filename = params.hdf5_filename + std::string(".lck");
+	      params.db_filename = db_filename;
+	      params.lock_filename = params.db_filename + std::string(".lck");
 	      params.k_val_start = k_val_start;
 	      params.k_val_end = k_val_end;
 	      params.group_name = std::string("/") + s_org;
 	      seq_filename.str("");
 	      seq_filename << seq_dir << "/" << s_org << "/" << s_org << ".fasta.gz";
 	      params.seq_filename = seq_filename.str();
-	      dataset_name.str("");
-	      dataset_name << "/" << s_org << "/" << "kmer_hash";
-	      params.hash_dataset_name = dataset_name.str();
-	      dataset_name.str("");
-	      dataset_name << "/" << s_org << "/" << "count";
-	      params.counts_dataset_name = dataset_name.str();
 	      params.num_threads = parallel_for_threads;
 	      params.priority = priority;
 	      KMerge::BuilderTask* task = new KMerge::BuilderTask(params);

@@ -9,9 +9,6 @@
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
 #include <iomanip>
-#include "indexBuilder.h"
-#include "queryProcessor.h"
-
 
 TEST_CASE("CompressHashesTest", "CompressionTest") {
   size_t N = 10 * 1000;
@@ -435,6 +432,8 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   params.group_name = "org1";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+  params.priority = 1;
+  params.lock_filename = params.db_filename + std::string(".lck");
 
   params.seq_filename ="/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   
@@ -518,7 +517,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 }
 
 
-TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
+TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   param_struct params;
   std::string value;
   std::stringstream ss_in, ss_delete;
@@ -583,7 +582,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5FromFastq", "[HashTest]") {
 
 }
 
-TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
+TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint> hashes_in, counts_in, comp_hashes, comp_counts;
   uint kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos, uncompressed_size;
   param_struct params1, params2, params3;
@@ -607,20 +606,26 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateHDF5", "[HashTest]") {
   params3.k_val_end = 5;
 
   params1.db_filename = "thread_example.db";
+  params1.lock_filename = params1.db_filename + std::string(".lck");
   params2.db_filename = "thread_example.db";
+  params2.lock_filename = params2.db_filename + std::string(".lck");
   params3.db_filename = "thread_example.db";
+  params3.lock_filename = params3.db_filename + std::string(".lck");
 
   params1.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
   params1.group_name = "208831";
   params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
+  params1.priority = 1;
 
   params2.seq_filename = "/home/darryl/Development/kmerge/tests/209328/209328.fasta.gz";
   params2.group_name = "209328";
   params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
+  params2.priority = 2;
 
   params3.seq_filename = "/home/darryl/Development/kmerge/tests/54095/54095.fasta.gz";
   params3.group_name = "54095";
   params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
+  params3.priority = 3;
 
   uint thread_count = 3;
 
