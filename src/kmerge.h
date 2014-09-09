@@ -13,6 +13,7 @@
 #include "blosc_filter.h"
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
+#include "leveldb/db.h"
 
 #ifndef H5_NO_NAMESPACE
 using namespace H5;
@@ -32,6 +33,7 @@ class KMerge;
 
 struct param_struct {
   KMerge * kmerge;
+  std::string db_filename;
   std::string hdf5_filename;
   uint k_val_start;
   uint k_val_end;
@@ -62,10 +64,15 @@ class KMerge {
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&);
+  static std::vector<uint> compress(const std::vector<uint>&);
+  static std::vector<uint> uncompress(const std::vector<uint>&, uint);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
+  bool add_dataset_size(uint, const std::string&);
+  bool add_dataset(const std::vector<uint>&, const std::string&);
   bool add_dataset(const uint, const uint*, param_struct&);
   bool add_dataset(const std::string, uint, const uint*, HDF5*);
+  bool add_taxonomy(const std::string&);
   bool add_taxonomy(const std::string&, const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);

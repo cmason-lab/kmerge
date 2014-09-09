@@ -3,12 +3,27 @@
 #include <map>
 #include <iostream>
 #include <pthread.h>
+#include "H5Cpp.h"
 #include "fq.h"
 #include "hdf5file.h"
+#include "SpookyV2.h"
+#include <dlib/logger.h> 
+#include "klib/kseq.h"
+#include <zlib.h>
+#include "blosc_filter.h"
+#include "cpp-btree/btree_map.h"
+#include <ulib/hash_chain.h>
+#include "leveldb/db.h"
+#include "fastpfor/codecfactory.h"
+#include "fastpfor/deltautil.h"
 
+#ifndef H5_NO_NAMESPACE
+using namespace H5;
+#endif
+
+KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
-#define THROTTLE_KMER_LENGTH 19 //lock k-mer counting above this value to throttle memory allocation for longer k-mers
 
 using namespace std;
 
@@ -20,14 +35,18 @@ class KMerge;
 
 struct param_struct {
   KMerge * kmerge;
+  std::string db_filename;
   std::string hdf5_filename;
   uint k_val_start;
   uint k_val_end;
-  std::string tmp_filename;
   std::string seq_filename;
   std::string group_name;
+  std::string compound_name;
   std::string hash_dataset_name;
   std::string counts_dataset_name;
+  uint num_threads;
+  uint priority;
+  std::string lock_filename;
 } ;
 
 
@@ -37,19 +56,30 @@ class KMerge {
   HashEnumType hash_type;
   std::string dir;
   static pthread_mutex_t mutex;
-  static pthread_mutex_t mem_mutex;
+  dlib::logger dlog;
+  std::string filename;
 
  public:
+  static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
+  static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
+
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
-  bool count_hashed_kmers(std::string&, uint, std::map<uint, uint>&);
-  bool add_dataset(const std::string, uint, const uint*);
-  bool add_taxonomy(const std::string&);
+  static std::string rev_comp(const std::string&);
+  static std::vector<uint>& compress(const std::vector<uint>&);
+  static std::vector<uint>& uncompress(const std::vector<uint>&, uint);
+  void build(param_struct&);
+  bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
+  bool add_dataset_size(uint, param_struct&, const std::string&);
+  bool add_dataset(const std::vector<uint>&, param_struct&, const std::string&);
+  bool add_dataset(const uint, const uint*, param_struct&);
+  bool add_dataset(const std::string, uint, const uint*, HDF5*);
+  bool add_taxonomy(const std::string&, const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);
   bool add_hash_and_count(std::map<uint, uint>&, uint, uint);
-  bool add_hash(std::map<uint, uint>&, uint);
+  bool add_hash(btree::btree_map<uint, uint>&, uint);
   bool sort_kmer_hashes_and_counts(std::vector<uint>&, std::vector<uint>&);
 
   class BuilderTask {
@@ -65,5 +95,20 @@ class KMerge {
       ~BuilderTask() {
       }
   };
+
+  class CountAndHashSeq {
+  public:
+
+    param_struct& params;
+    ulib::chain_hash_map<uint, uint>& hashed_counts;
+    bool print_status;
+
+    void operator() (long i) const;
+
+  CountAndHashSeq( param_struct& params_, ulib::chain_hash_map<uint, uint>& hashed_counts_, bool print_status_) : params(params_), hashed_counts(hashed_counts_), print_status(print_status_) {}
+
+    ~CountAndHashSeq() {}
+    };
+
 };
 

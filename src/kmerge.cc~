@@ -5,6 +5,7 @@
 #include <dlib/serialize.h>
 #include <fstream>
 #include <unistd.h>
+#include "fastpfor/codecfactory.h"
 
 using namespace std;
 
@@ -112,7 +113,7 @@ bool KMerge::add_hash_and_count(std::map<uint, uint>& hashed_counts, uint kmer_h
   return true;
 }
 
-bool KMerge::add_hash(stx::btree_map<uint, uint>& hashed_counts, uint kmer_hash_val) {
+bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_hash_val) {
   if (hashed_counts.find(kmer_hash_val) == hashed_counts.end()) {
     hashed_counts[kmer_hash_val] = 1; 
   } else {   
@@ -121,14 +122,91 @@ bool KMerge::add_hash(stx::btree_map<uint, uint>& hashed_counts, uint kmer_hash_
   return true;
 }
 
-
-bool KMerge::count_hashed_kmers(param_struct& params) {
-  KMerge::CountAndHashSeqFastx func(params);
+bool KMerge::count_hashed_kmers(param_struct& params,  ulib::chain_hash_map<uint, uint>& hashed_counts, bool print_status) {
+  KMerge::CountAndHashSeq func(params, hashed_counts, print_status);
   dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
 
   return true;
 }
 
+std::vector<uint>& compress(const std::vector<uint>& data) {
+  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
+  std::vector<uint32_t> compressed_output(data.size()+1024);
+  size_t compressedsize = compressed_output.size();
+  codec.encodeArray(data.data(), data.size(),
+                    compressed_output.data(), compressedsize);
+
+  compressed_output.resize(compressedsize);
+  compressed_output.shrink_to_fit();
+  return compressed_output;
+}
+
+std::vector<uint>& uncompress(const std::vector<uint>& compressed_output, uint uncompressed_length) {
+  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
+  std::vector<uint32_t> data(uncompressed_length);
+  size_t recoveredsize = data.size();
+
+  codec.decodeArray(compressed_output.data(),
+                    compressed_output.size(), data.data(), recoveredsize);
+  data.resize(recoveredsize);
+
+  return data;
+
+}
+
+bool KMerge::add_dataset_size(uint size, param_struct& params, const std::string& key) {
+  leveldb::DB* db;
+  leveldb::Options options;
+  std::stringstream ss_out;
+  options.create_if_missing = true;
+
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
+  if (s.ok()) {
+    this->dlog << dlib::LERROR << "Unable to open db for writing";
+    return false;
+  }
+
+  ss_out << size;
+
+  s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  if (s.ok()) {
+    this->dlog << dlib::LERROR << "Unable to write data for " << key;
+    return false;
+  }
+  delete db;
+
+}
+
+bool KMerge::add_dataset(const std::vector<uint>& data, param_struct& params, const std::string& key){
+  leveldb::DB* db;
+  leveldb::Options options;
+  std::stringstream ss_out;
+  options.create_if_missing = true;
+
+  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
+  std::vector<uint32_t> compressed_output(data.size()+1024);
+  size_t compressedsize = compressed_output.size();
+  codec.encodeArray(data.data(), data.size(),
+                    compressed_output.data(), compressedsize);
+
+  compressed_output.resize(compressedsize);
+  compressed_output.shrink_to_fit();
+
+  dlib::serialize(compressed_output, ss_out);
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
+  if (s.ok()) {
+    this->dlog << dlib::LERROR << "Unable to open db for writing";
+    return false;
+  }
+
+  s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  if (s.ok()) {
+    this->dlog << dlib::LERROR << "Unable to write data for " << key;
+    return false;
+  }
+  delete db;
+
+}
 
 bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& params) {
   H5File* file;
@@ -150,13 +228,12 @@ bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& p
     H5::DataSpace dataspace = dataset->getSpace();
     rank = dataspace.getSimpleExtentNdims();
 
-    hsize_t dims_out[2];
+    hsize_t dims_out[1];
     int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-    hsize_t offset[2];
-    offset[0] = 0;
-    offset[1] = dims_out[1];
-    params.compound_name = params.group_name + std::string("|") + std::to_string(dims_out[1]);
-    dims_out[1]++; // extend dataset by 1                                                                                                                                                                                                      
+    hsize_t offset[1];
+    offset[0] = dims_out[0];
+    params.compound_name = params.group_name + std::string("|") + std::to_string(dims_out[0]/MAX_UINT_VAL);
+    dims_out[0] = ((dims_out[0]/MAX_UINT_VAL)+1)*MAX_UINT_VAL;; // extend dataset by MAX_UINT_VAL                                                                                                                                                                                                      
     dataset->extend( dims_out );
 
     DataSpace fspace = dataset->getSpace();
@@ -171,11 +248,11 @@ bool KMerge::add_dataset(const uint data_size, const uint* data, param_struct& p
     /*
      * Create property list for a dataset and set up fill values. 
      */
-    rank = 2;
+    rank = 1;
     uint fillvalue = 0;   /* Fill value for the dataset */
     H5::DSetCreatPropList plist;
-    hsize_t max_dims[2] = {data_size, H5S_UNLIMITED};
-    hsize_t chunk_dims[2] = {KMerge::CHUNK_ROW_SIZE, num_cols};
+    hsize_t max_dims[1] = {H5S_UNLIMITED};
+    hsize_t chunk_dims[1] = {KMerge::CHUNK_ROW_SIZE};
 
     cd_values[4] = 1;       /* compression level */
     cd_values[5] = 1;       /* 0: shuffle not active, 1: shuffle active */
@@ -273,8 +350,7 @@ OutputIterT merge_apply(
 			InputIterT1 first1, InputIterT1 last1,
 			InputIterT2 first2, InputIterT2 last2,
 			OutputIterT result, Comparator comp, Func func) {
-  while (true)
-    {
+  while (true) {
       if (first1 == last1) return std::copy(first2, last2, result);
       if (first2 == last2) return std::copy(first1, last1, result);
 
@@ -306,36 +382,14 @@ T sum_pairs(T a, T b) {
 
 void KMerge::build(param_struct& params) {
   stringstream file_name, file_loc;
-  stx::btree_map<uint, uint> hashed_counts, result, holder;
-  std::ifstream ifs;
+  ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
-  }
-
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    params.kmerge->dlog << dlib::LINFO << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    if(!holder.restore(ifs)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to restore " << *s_iter;
-    }
-
-    merge_apply(hashed_counts.begin(), hashed_counts.end(), holder.begin(), holder.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
-    holder.clear();
-    stx::btree_map<uint, uint>().swap(holder);
-    result.swap(hashed_counts);
-    result.clear();
-    stx::btree_map<uint, uint>().swap(result);
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    params.kmerge->dlog << dlib::LINFO << "Finished adding " << *s_iter << std::endl;
   }
 
   uint hash_count = hashed_counts.size();
@@ -343,15 +397,14 @@ void KMerge::build(param_struct& params) {
 
   std::vector<uint> hashes, counts;
 
-  for (stx::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    hashes.push_back(iter->first);
-    counts.push_back(iter->second);
+  for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    hashes.push_back(iter.key());
+    counts.push_back(iter.value());
   }
 
   
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
-  stx::btree_map<uint, uint>().swap( hashed_counts );
 
 
   if(!(params.kmerge->add_dataset(params.hash_dataset_name, hashes.size(), &hashes[0], NULL))) {
@@ -384,11 +437,10 @@ void KMerge::build(param_struct& params) {
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
-  stx::btree_map<uint, uint> hashed_counts, result, holder;
-  std::ifstream ifs;
+  ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
@@ -396,39 +448,17 @@ void KMerge::BuilderTask::execute() {
   }
 
 
-  for (std::vector<std::string>::const_iterator s_iter = params.serialized_files.begin(); s_iter != params.serialized_files.end(); s_iter++) {
-    params.kmerge->dlog << dlib::LINFO << "Adding " << *s_iter << std::endl;
-    ifs.open(s_iter->c_str(), std::ifstream::binary);
-    if(!holder.restore(ifs)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to restore " << *s_iter;
-    }
-
-    merge_apply(hashed_counts.begin(), hashed_counts.end(), holder.begin(), holder.end(), std::inserter(result, result.begin()), compare_first<pair<uint, uint> >, sum_pairs<pair<uint, uint> >);
-    holder.clear();
-    stx::btree_map<uint, uint>().swap(holder);
-    result.swap(hashed_counts);
-    result.clear();
-    stx::btree_map<uint, uint>().swap(result);
-
-    ifs.close();
-    if (remove(s_iter->c_str()) != 0) {
-      perror( "Error deleting file");
-    }
-    params.kmerge->dlog << dlib::LINFO << "Finished adding " << *s_iter << std::endl;
-  }
-
   uint hash_count = hashed_counts.size();
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hash_count;
 
   std::vector<uint> counts(MAX_UINT_VAL);
 
-  for (stx::btree_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {                                                                                      
-    counts[iter->first] = iter->second;  
-  }                                                                                                                                                                                                      
+  for (ulib::chain_hash_map<uint, uint>::const_iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {       
+    counts[iter.key()] = iter.value();  
+  }                                                                                    
 
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
-  stx::btree_map<uint, uint>().swap( hashed_counts );
   
   while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority);
 
@@ -454,40 +484,34 @@ void KMerge::BuilderTask::execute() {
 
 }
 
-void KMerge::CountAndHashSeqFastx::operator() (long i) const {
-  stx::btree_map<uint, uint> local_map;
-  uint hash;
+void KMerge::CountAndHashSeq::operator() (long i) const {
+  uint hash, counter=0;
   int l;
   kseq_t *seq;
   gzFile fp;
-  FILE *sfp;
-  std::stringstream ss;
-  std::ofstream ofs;
 
 
   uint k = 2*i - 1; // make sure k is converted to odd value from input index
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
   while ((l = kseq_read(seq)) >= 0) {
+    if (print_status == true) {
+      params.kmerge->dlog << dlib::LINFO << "Processing " << params.group_name << " sequence " << seq->name.s << " for k = " << k;
+    }
     std::string seq_str(seq->seq.s);
     if(seq_str.size() < k) return;
     for (uint j = 0; j < seq_str.size() - k + 1; j++) {
       std::string kmer = seq_str.substr(j, k);
       std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
-      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides            
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { 
+	// skip kmers containing non-nucleotides            
 	continue;
       }
       hash = params.kmerge->hash_kmer(kmer);
-      local_map[hash]++;
+      hashed_counts[hash]++;
+      counter++;
     }
   }
-  params.kmerge->dlog << dlib::LINFO << "Parsed " << local_map.size() << " hashes from sequence(s) in " << params.group_name << " (k = " << k << ")";
-  params.kmerge->dlog << dlib::LINFO << "Writing counts to disk for k= " << k;
-  ss << params.group_name.substr(1) << "_" << k << ".bin";  
-  ofs.open(ss.str().c_str(), std::ofstream::binary);
-  local_map.dump(ofs);
-  params.kmerge->dlog << dlib::LINFO << "Finished writing counts to disk for k= " << k;
-  local_map.clear();
-  params.serialized_files.push_back(ss.str());
-  ofs.close();
+  params.kmerge->dlog << dlib::LINFO << "Parsed " << counter << " hashes from sequence(s) in " << params.group_name << " (k = " << k << ")";
 }
+
