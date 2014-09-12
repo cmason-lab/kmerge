@@ -258,7 +258,11 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k5.txt");
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k7.txt");
 
-  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".");
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".", db);
 
   params.kmerge = kmerge;
 
@@ -314,7 +318,11 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k5.txt");
   files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k7.txt");
 
-  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".");
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".", db);
 
   params.kmerge = kmerge;
 
@@ -363,7 +371,12 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   
-  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+
+  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".", db);
   params.kmerge = kmerge;
 
   KMerge::CountAndHashSeq func(params, hashed_counts, true);
@@ -378,7 +391,12 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
 
 TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
   ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
-  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".");
+
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".", db);
   param_struct params;
 
   params.k_val_start = 3;
@@ -403,7 +421,13 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   std::string rc_test_seq = KMerge::rev_comp(test_seq);
   
   REQUIRE(rc_test_seq == "CTAGT");
-  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".");
+
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+
+  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".", db);
   
   uint hash1 = kmerge->hash_kmer(test_seq), hash2 = kmerge->hash_kmer(rc_test_seq);
   REQUIRE(hash1 == hash2);
@@ -437,8 +461,14 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 
   params.seq_filename ="/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
 
-  KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
+  REQUIRE(s.ok() == true);
+
+  KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".", db);
   params.kmerge = kmerge;
   
   bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
@@ -472,15 +502,8 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   kmerge->add_dataset_size(hashes_out.size(), params.group_name + std::string("|size"));  
   kmerge->add_dataset(hashes_out, params.group_name + std::string("|kmer_hash"));
   kmerge->add_dataset(counts_out, params.group_name + std::string("|count"));
-    
+
   delete kmerge;
-
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
-  REQUIRE(s.ok() == true);
 
   s = db->Get(leveldb::ReadOptions(), params.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
@@ -503,6 +526,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   comp_counts.clear();
   std::vector<uint>().swap(comp_counts);
 
+  delete db;
 
   for (pos = 0; pos < hashes_in.size(); pos++) {
     REQUIRE(hashes_out[pos] == hashes_in[pos]);
@@ -522,28 +546,28 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   std::string value;
   std::stringstream ss_in, ss_delete;
   std::vector<uint> comp_hashes, comp_counts;
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
 
   params.k_val_start = 3;
   params.k_val_end = 7;
-  params.db_filename = "thread_fastq.db";
+  params.db_filename = "thread_fq.db";
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
   params.group_name = "sample";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
+  REQUIRE(s.ok() == true);
+
+  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".", db);
 
   params.kmerge = kmerge;
 
   kmerge->build(params);
 
+
   delete kmerge;
-
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
-  REQUIRE(s.ok() == true);
 
   s = db->Get(leveldb::ReadOptions(), params.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
@@ -571,6 +595,15 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   REQUIRE(hashes_in.size() == 8727);
   REQUIRE(counts_in.size() == 8727);
 
+  //ensure that hashes are in sorted order
+  uint last = 0;
+  for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
+    if (v_iter != hashes_in.begin()) {
+      REQUIRE(*v_iter > last);
+    }
+    last = *v_iter;
+  }
+
   delete db;
 
   ss_delete << "rm " << params.db_filename << "/*";
@@ -596,7 +629,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   leveldb::DB* db;
   leveldb::Options options;
   options.create_if_missing = true;
-
 
   params1.k_val_start = 5;
   params1.k_val_end = 5;
@@ -631,7 +663,11 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
   dlib::thread_pool tp(thread_count);
 
-  KMerge* kmerge = new KMerge(params1.db_filename, "lookup3", ".");
+  leveldb::Status s = leveldb::DB::Open(options, params1.db_filename, &db);
+  REQUIRE(s.ok() == true);
+
+
+  KMerge* kmerge = new KMerge(params1.db_filename, "lookup3", ".", db);
 
   params1.kmerge = kmerge;
   params2.kmerge = kmerge;
@@ -650,9 +686,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   delete kmerge;
 
 
-  leveldb::Status s = leveldb::DB::Open(options, params1.db_filename, &db);
-  REQUIRE(s.ok() == true);
-
   kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
   kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
@@ -668,6 +701,15 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
   comp_hashes.clear();
   std::vector<uint>().swap(comp_hashes);
+
+  //ensure that hashes are in sorted order
+  uint last = 0;
+  for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
+    if (v_iter != hashes_in.begin()) {
+      REQUIRE(*v_iter > last);
+    }
+    last = *v_iter;
+  }
 
   ss_in.str("");
   s = db->Get(leveldb::ReadOptions(), params1.group_name + std::string("|count"), &value);
@@ -744,6 +786,14 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   comp_hashes.clear();
   std::vector<uint>().swap(comp_hashes);
 
+  //ensure that hashes are in sorted order
+  for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
+    if (v_iter != hashes_in.begin()) {
+      REQUIRE(*v_iter > last);
+    }
+    last = *v_iter;
+  }
+
   ss_in.str("");
   s = db->Get(leveldb::ReadOptions(), params2.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
@@ -816,6 +866,14 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
   comp_hashes.clear();
   std::vector<uint>().swap(comp_hashes);
+
+  //ensure that hashes are in sorted order
+  for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
+    if (v_iter != hashes_in.begin()) {
+      REQUIRE(*v_iter > last);
+    }
+    last = *v_iter;
+  }
 
   ss_in.str("");
   s = db->Get(leveldb::ReadOptions(), params3.group_name + std::string("|count"), &value);
@@ -896,7 +954,12 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   params.group_name = "org1";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  params.kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+
+
+  params.kmerge = new KMerge(params.db_filename, "lookup3", ".", db);
   bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -908,7 +971,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge(params.db_filename, "spooky", ".");
+  params.kmerge = new KMerge(params.db_filename, "spooky", ".", db);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -920,7 +983,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge(params.db_filename, "city", ".");
+  params.kmerge = new KMerge(params.db_filename, "city", ".", db);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -942,19 +1005,21 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   std::stringstream ss_in, ss_delete;
   std::map<std::string, std::string> taxonomy;
 
-  
-
-  KMerge *kmerge = new KMerge(db_filename, "lookup3", ".");
-
-  kmerge->add_taxonomy(group);
-
-  delete kmerge;
-
   leveldb::DB* db;
   leveldb::Options options;
   options.create_if_missing = true;
 
   leveldb::Status s = leveldb::DB::Open(options, db_filename, &db);
+  REQUIRE(s.ok() == true);
+  
+  KMerge *kmerge = new KMerge(db_filename, "lookup3", ".", db);
+
+  kmerge->add_taxonomy(group);
+
+  delete db;
+  delete kmerge;
+
+  s = leveldb::DB::Open(options, db_filename, &db);
   REQUIRE(s.ok() == true);
 
    

@@ -43,12 +43,13 @@ class KMerge {
   std::string dir;
   dlib::logger dlog;
   std::string filename;
+  leveldb::DB* db;
 
  public:
   static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
   static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
 
-  KMerge(const std::string&, const std::string&, const std::string&);
+  KMerge(const std::string&, const std::string&, const std::string&, leveldb::DB*);
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static std::vector<uint> compress(const std::vector<uint>&);
