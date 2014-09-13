@@ -9,11 +9,12 @@
 
 using namespace std;
 
-KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir, leveldb::DB* db): dlog("kmerge") {
+
+
+KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
   this->filename = filename;
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
-  this->db = db;
 
   if (hash_func == "lookup3") {
     this->hash_type = LOOKUP3;
@@ -152,12 +153,12 @@ std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed_output,
 
 
 
-bool KMerge::add_dataset_size(uint size, const std::string& key) {
+bool KMerge::add_dataset_size(uint size, const std::string& key, leveldb::DB* db) {
   std::stringstream ss_out;
 
   ss_out << size;
 
-  leveldb::Status s = this->db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  leveldb::Status s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
   if (!s.ok()) {
     this->dlog << dlib::LERROR << "Unable to write data for " << key;
     return false;
@@ -165,16 +166,18 @@ bool KMerge::add_dataset_size(uint size, const std::string& key) {
   return true;
 
 }
+ 
 
 
-bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key){
+
+bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, leveldb::DB* db){
   std::stringstream ss_out;
 
   std::vector<uint> compressed = KMerge::compress(data);
 
   dlib::serialize(compressed, ss_out);
 
-  leveldb::Status s = this->db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  leveldb::Status s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
   if (!s.ok()) {
     this->dlog << dlib::LERROR << "Unable to write data for " << key;
     return false;
@@ -185,7 +188,8 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key){
 }
 
 
-bool KMerge::add_taxonomy(const std::string& group_name) {
+
+bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
   std::map<std::string, std::string> taxonomy;
   std::stringstream ss_out, path_root, in_file_ss;
   std::string line;
@@ -216,7 +220,7 @@ bool KMerge::add_taxonomy(const std::string& group_name) {
   in_file.close();
   dlib::serialize(taxonomy, ss_out);
 
-  leveldb::Status s = this->db->Put(leveldb::WriteOptions(), group_name + std::string("|taxonomy"), ss_out.str());
+  leveldb::Status s = db->Put(leveldb::WriteOptions(), group_name + std::string("|taxonomy"), ss_out.str());
   if (!s.ok()) {
     this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name + std::string("|taxonomy");
     return false;
@@ -225,10 +229,12 @@ bool KMerge::add_taxonomy(const std::string& group_name) {
 }
 
 
+
 void KMerge::build(param_struct& params) {
   stringstream file_name, file_loc;
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
-
+  leveldb::Options options;
+  options.create_if_missing = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
@@ -260,22 +266,28 @@ void KMerge::build(param_struct& params) {
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
 
+  
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
+  if (!s.ok()) {
+    params.kmerge->dlog << dlib::LERROR << s.ToString();
+    return;
+  }
 
-
-  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"))) {
+  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
     return;
   }
-  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"))) {
+  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
     return;
   }
 
-  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"))) {
+  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
     return;
   }
 
+  delete params.db;
 
   params.kmerge->dlog << dlib::LINFO << hashes.size() << " k-mer hashes for " << params.group_name;
 
@@ -294,6 +306,8 @@ void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
   std::vector<uint> hashes, counts;
+  leveldb::Options options;
+  options.create_if_missing = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
@@ -323,29 +337,37 @@ void KMerge::BuilderTask::execute() {
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
 
-  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority);
+  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
 
+  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
+  if (!s.ok()) {
+    params.kmerge->dlog << dlib::LERROR << s.ToString();
+    return;
+  }
+  
 
-  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"))){
+  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)){
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
     return;
   }
 
-  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"))) {
+  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
     return;
   }
 
-  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"))) {
+  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
     return;
   }
 
-  if(!(params.kmerge->add_taxonomy(params.group_name))) {
+  if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
     return;
   }
 
+  delete params.db;
+  
   rmdir(params.lock_filename.c_str());
 
   params.kmerge->dlog << dlib::LINFO << hashes.size() << " k-mer hashes for " << params.group_name;

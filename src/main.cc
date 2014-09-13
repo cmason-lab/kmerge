@@ -114,19 +114,10 @@ int main(int argc, char const ** argv) {
   std::string group_name("");
   std::string hash_dataset_name("");
   std::string count_dataset_name("");
-  leveldb::DB* db;
-  leveldb::Options options;
-  leveldb::Status s;
-  options.create_if_missing = true;
   KMerge *kmerge;
 
   if (parser.option("i")) {
-    s = leveldb::DB::Open(options, db_filename, &db);
-    if (!s.ok()) {
-      std::cerr << "Unable to open database. Exiting..." << std::endl;
-      return 1;
-    }
-    kmerge = new KMerge(db_filename, hash_func, "", db);
+    kmerge = new KMerge(db_filename, hash_func, "");
     param_struct params;
     params.kmerge = kmerge;
     params.db_filename = db_filename;
@@ -138,7 +129,6 @@ int main(int argc, char const ** argv) {
     dataset_name.str("");
     params.num_threads = parallel_for_threads;
     kmerge->build(params);
-    delete db;
   } else {
     struct stat st;
     DIR *dirp;
@@ -146,17 +136,12 @@ int main(int argc, char const ** argv) {
     vector<KMerge::BuilderTask*> task_ptrs;
     dlib::thread_pool tp(num_threads);
     dirp = opendir(seq_dir.c_str());
-    s = leveldb::DB::Open(options, db_filename, &db);
-    if (!s.ok()) {
-      std::cerr << "Unable to open database. Exiting..." << std::endl;
-      return 1;
-    }
-    kmerge = new KMerge(db_filename, hash_func, seq_dir, db);
+    kmerge = new KMerge(db_filename, hash_func, seq_dir);
     while ((dp = readdir(dirp)) != NULL) {
       if(stat(dp->d_name, &st) == 0) {
 	if (S_ISDIR(st.st_mode)) {
 	  std::string s_org(dp->d_name);
-	  if (s_org.compare(".") != 0 && s_org.compare("..") != 0 && s_org.compare(db_filename.c_str()) != 0) {
+	  if (s_org.compare(".") != 0 && s_org.compare("..") != 0) {
 	    try {
 	      param_struct params;
 	      params.kmerge = kmerge;
@@ -187,7 +172,6 @@ int main(int argc, char const ** argv) {
       delete *iter;
     }
     (void)closedir(dirp);
-    delete db;
   }
 
   delete kmerge;
