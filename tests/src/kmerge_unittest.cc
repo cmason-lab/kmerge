@@ -30,6 +30,57 @@ TEST_CASE("CompressHashesTest", "CompressionTest") {
 
 }
 
+/*TEST_CASE("BangDBBasicsTest", "HashStorageTest") {
+  std::string key("test");
+  uint value_out = 1, value_in;
+  std::stringstream ss_in, ss_out;
+  dlib::serialize(value_out, ss_out);
+  database* db = new database((char*)"testdb");
+  //short dbtype = EMBED_INMEM_PERSIST, idxtype = EXTHASH, walog = 1; 
+  table* tbl = db->gettable((char*)"reference"); 
+  if(tbl == NULL) { 
+    std::cerr << "ERROR:table NULL error" << std::endl; 
+  } 
+  connection* conn = tbl->getconnection(); 
+  if(conn == NULL) { 
+    std::cerr << "ERROR:connection NULL error" << std::endl; 
+  }
+
+  //data type to be used 
+  FDT *fk, *fv, *fout; 
+
+  //create FDT type with key and val 
+  fk = new FDT((void*)key.c_str(), strlen(key.c_str())); 
+  fv = new FDT((void*)ss_out.str().c_str(), strlen(ss_out.str().c_str())); 
+
+
+  int retval = 0; 
+  //now insert 
+  if((retval = conn->put(fk, fv, DELETE_EXISTING)) < 0) 
+    std::cerr << "error in insert" << std::endl; 
+
+  //get the val 
+  if((fout = conn->get(fk)) == NULL) 
+    std::cerr << "error in get" << std::endl;
+
+  ss_in << fout->data;
+  dlib::deserialize(value_in, ss_in);
+  REQUIRE(value_in == 1);
+
+  //release fout 
+  if(fout) fout->free(); 
+  delete fout; 
+
+  delete fv; 
+  delete fk; 
+
+  delete tbl;
+  db->closedatabase();
+  delete db;
+
+  system("rm -r ./testdb");
+  }*/
+
 
 TEST_CASE("LevelDBBasicsTest", "HashStorageTest") {
   std::string key1("test"), value;

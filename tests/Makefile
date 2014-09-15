@@ -24,7 +24,7 @@ CXX=g++ -std=c++11 -mssse3
 
 # libraries to include
 
-LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lulib -lleveldb -lpthread -lFastPFor_lib
+LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lulib -lleveldb -lpthread -lFastPFor_lib -lbangdb
 
 # House-keeping build targets.
 

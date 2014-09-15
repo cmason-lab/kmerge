@@ -44,6 +44,7 @@ class KMerge {
   std::string dir;
   dlib::logger dlog;
   std::string filename;
+  static pthread_mutex_t db_mutex;
 
  public:
   static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter

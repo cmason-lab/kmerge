@@ -9,7 +9,7 @@
 
 using namespace std;
 
-
+pthread_mutex_t KMerge::db_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
   this->filename = filename;
@@ -53,6 +53,7 @@ std::string KMerge::rev_comp(const std::string& input) {
 
   return output;
 }
+
 uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
   std::string rc_kmer = KMerge::rev_comp(kmer), combine;
   if (kmer < rc_kmer) {
@@ -155,14 +156,21 @@ std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed_output,
 
 bool KMerge::add_dataset_size(uint size, const std::string& key, leveldb::DB* db) {
   std::stringstream ss_out;
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
 
+
+  this->dlog << dlib::LINFO << "Adding dataset size for " << key;
   ss_out << size;
 
-  leveldb::Status s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  leveldb::Status s = db->Put(write_options, key, ss_out.str());
   if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to write data for " << key;
+    this->dlog << dlib::LERROR << "Unable to add dataset size for " << key << ": " << s.ToString();
     return false;
   }
+
+  this->dlog <<dlib::LINFO << "Finished adding dataset size for " << key;
+
   return true;
 
 }
@@ -172,16 +180,27 @@ bool KMerge::add_dataset_size(uint size, const std::string& key, leveldb::DB* db
 
 bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, leveldb::DB* db){
   std::stringstream ss_out;
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
+
+
+  this->dlog << dlib::LINFO << "Adding data for " << key;
+
+  this->dlog << dlib::LINFO << "Compressing data for " << key;
 
   std::vector<uint> compressed = KMerge::compress(data);
 
+  this->dlog << dlib::LINFO << "Finished compressing data for " << key;
+
   dlib::serialize(compressed, ss_out);
 
-  leveldb::Status s = db->Put(leveldb::WriteOptions(), key, ss_out.str());
+  leveldb::Status s = db->Put(write_options, key, ss_out.str());
   if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to write data for " << key;
+    this->dlog << dlib::LERROR << "Unable to write data for " << key << ": " << s.ToString();
     return false;
   }
+
+  this->dlog <<dlib::LINFO << "Finished adding data for " << key;
 
   return true;
 
@@ -193,6 +212,12 @@ bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
   std::map<std::string, std::string> taxonomy;
   std::stringstream ss_out, path_root, in_file_ss;
   std::string line;
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
+
+
+
+  this->dlog <<dlib::LINFO << "Adding taxonomy for " << group_name;
 
   path_root << "/" << group_name << "/taxonomy";
 
@@ -220,11 +245,14 @@ bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
   in_file.close();
   dlib::serialize(taxonomy, ss_out);
 
-  leveldb::Status s = db->Put(leveldb::WriteOptions(), group_name + std::string("|taxonomy"), ss_out.str());
+  leveldb::Status s = db->Put(write_options, group_name + std::string("|taxonomy"), ss_out.str());
   if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name + std::string("|taxonomy");
+    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name << ": " << s.ToString();
     return false;
   }
+
+  this->dlog <<dlib::LINFO << "Finished adding taxonomy for " << group_name;
+
   return true;
 }
 
@@ -246,13 +274,19 @@ void KMerge::build(param_struct& params) {
 
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hashed_counts.size();
 
+  params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
+
   btree::btree_map<uint, uint> sorted_hashed_counts;
   for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     sorted_hashed_counts[iter.key()] = iter.value();
   }
 
+  params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
+
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
+
+  params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
 
   std::vector<uint> hashes, counts;
 
@@ -261,6 +295,7 @@ void KMerge::build(param_struct& params) {
     counts.push_back(b_iter->second);
   }
 
+  params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
   
   // remove all elements from map as they are no longer needed
   sorted_hashed_counts.clear();
@@ -275,15 +310,18 @@ void KMerge::build(param_struct& params) {
 
   if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
+    delete params.db;
     return;
   }
   if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    delete params.db;
     return;
   }
 
   if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    delete params.db;
     return;
   }
 
@@ -319,56 +357,67 @@ void KMerge::BuilderTask::execute() {
 
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hashed_counts.size() << " for " << params.group_name;
 
+
+  params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
   // put hashes in sorted order via btree_map
   btree::btree_map<uint, uint> sorted_hashed_counts;
   for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
     sorted_hashed_counts[iter.key()] = iter.value();
   }
 
+  params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
+
   // remove all elements from map as they are no longer needed
   hashed_counts.clear();
+
+  params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
 
   for (btree::btree_map<uint, uint>::iterator b_iter = sorted_hashed_counts.begin(); b_iter != sorted_hashed_counts.end(); ++b_iter) {
     hashes.push_back(b_iter->first);
     counts.push_back(b_iter->second);
   }
+
+  params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
   
   // remove all elements from map as they are no longer needed
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
 
-  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
-
   leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
-  if (!s.ok()) {
-    params.kmerge->dlog << dlib::LERROR << s.ToString();
-    return;
+  while (!s.ok()) {
+    sleep(params.priority);
+    s = leveldb::DB::Open(options, params.db_filename, &(params.db));
   }
   
+  params.kmerge->dlog <<dlib::LINFO << params.group_name << " obtained db lock";
 
   if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)){
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
+    delete params.db;
     return;
   }
 
   if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    delete params.db;
     return;
   }
 
   if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    delete params.db;
     return;
   }
 
   if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
+    delete params.db;
     return;
   }
 
   delete params.db;
-  
-  rmdir(params.lock_filename.c_str());
+
+  params.kmerge->dlog <<dlib::LINFO << params.group_name << " relinquished db lock";
 
   params.kmerge->dlog << dlib::LINFO << hashes.size() << " k-mer hashes for " << params.group_name;
 
