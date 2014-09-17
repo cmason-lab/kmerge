@@ -153,22 +153,22 @@ std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed_output,
 
 
 
-bool KMerge::add_dataset_size(uint size, const std::string& key, leveldb::DB* db) {
+bool KMerge::add_property(uint size, const std::string& key, leveldb::DB* db) {
   std::stringstream ss_out;
   leveldb::WriteOptions write_options;
   write_options.sync = true;
 
 
-  this->dlog << dlib::LINFO << "Adding dataset size for " << key;
+  this->dlog << dlib::LINFO << "Adding property for " << key;
   ss_out << size;
 
   leveldb::Status s = db->Put(write_options, key, ss_out.str());
   if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to add dataset size for " << key << ": " << s.ToString();
+    this->dlog << dlib::LERROR << "Unable to add property for " << key << ": " << s.ToString();
     return false;
   }
 
-  this->dlog <<dlib::LINFO << "Finished adding dataset size for " << key;
+  this->dlog <<dlib::LINFO << "Finished adding property for " << key;
 
   return true;
 
@@ -308,23 +308,32 @@ void KMerge::build(param_struct& params) {
     return;
   }
 
-  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)) {
+  uint partitions = ceil((double) hashes.size()/PARTITION_SIZE);
+
+  if(!params.kmerge->add_property(partitions, params.group_name + std::string("|parts"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
     delete params.db;
     return;
   }
-  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
-    delete params.db;
-    return;
-  }
 
-  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
-    delete params.db;
-    return;
-  }
+  for (uint i = 0; i < partitions; i++) {
+    if(!params.kmerge->add_property(hashes.size(), params.group_name + std::string("|size|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
+      delete params.db;
+      return;
+    }
+    if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+      delete params.db;
+      return;
+    }
 
+    if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+      delete params.db;
+      return;
+    }
+  }
   delete params.db;
 
   params.kmerge->dlog << dlib::LINFO << hashes.size() << " k-mer hashes for " << params.group_name;
@@ -392,22 +401,31 @@ void KMerge::BuilderTask::execute() {
   
   params.kmerge->dlog <<dlib::LINFO << params.group_name << " obtained db lock";
 
-  if(!params.kmerge->add_dataset_size(hashes.size(), params.group_name + std::string("|size"), params.db)){
+  uint partitions = ceil((double) hashes.size()/PARTITION_SIZE);
+
+  if(!params.kmerge->add_property(partitions, params.group_name + std::string("|parts"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
     delete params.db;
     return;
   }
 
-  if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash"), params.db)) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
-    delete params.db;
-    return;
-  }
+  for (uint i = 0; i < partitions; i++) {
+    if(!params.kmerge->add_property(hashes.size(), params.group_name + std::string("|size|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
+      delete params.db;
+      return;
+    }
+    if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+      delete params.db;
+      return;
+    }
 
-  if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count"), params.db)) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
-    delete params.db;
-    return;
+    if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count|") + std::to_string(i), params.db)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+      delete params.db;
+      return;
+    }
   }
 
   if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
@@ -415,6 +433,7 @@ void KMerge::BuilderTask::execute() {
     delete params.db;
     return;
   }
+
 
   delete params.db;
 

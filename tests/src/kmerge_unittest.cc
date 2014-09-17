@@ -10,6 +10,7 @@
 #include <dlib/logger.h>
 #include <iomanip>
 #include <sys/stat.h>
+#include <random>
 
 TEST_CASE("CompressHashesTest", "CompressionTest") {
   size_t N = 10 * 1000;
@@ -28,53 +29,6 @@ TEST_CASE("CompressHashesTest", "CompressionTest") {
   for (uint i = 0; i <= mydata.size(); i++) {
     REQUIRE(mydata[i] == mydataback[i]);
   }
-
-}
-
-TEST_CASE("LMDBBasicsTest", "HashStorageTest") {
-  uint value_out = 1, value_in;
-  int rc;
-  MDB_env *env;
-  MDB_dbi dbi;
-  MDB_val key_out, data_out, data_in;
-  MDB_txn *txn;
-  MDB_cursor *cursor;
-  char k[] = "test";
-
-  rc = mdb_env_create(&env);
-  REQUIRE(rc == 0);
-  system("mkdir -p ./testdb");
-  rc = mdb_env_open(env, "./testdb", 0, 0664);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_begin(env, NULL, 0, &txn);
-  REQUIRE(rc == 0);
-  rc = mdb_open(txn, NULL, 0, &dbi);
-  REQUIRE(rc == 0);
-
-  key_out.mv_size = strlen(k);
-  key_out.mv_data = k;
-  data_out.mv_size = sizeof(uint);
-  data_out.mv_data = &value_out;
-
-  rc = mdb_put(txn, dbi, &key_out, &data_out, 0);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_commit(txn);
-  REQUIRE(rc == 0);
-  if (rc) {
-    fprintf(stderr, "mdb_txn_commit: (%d) %s\n", rc, mdb_strerror(rc));
-    goto leave;
-  }
-  rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-  REQUIRE(rc == 0);
-  rc = mdb_get(txn, dbi, &key_out, &data_in);
-  REQUIRE(rc == 0);
-  REQUIRE((int) data_in.mv_size == 4);
-  REQUIRE(*(uint*) data_in.mv_data == 1);
-  mdb_txn_abort(txn);
- leave:
-  mdb_close(env, dbi);
-  mdb_env_close(env);
-  system("rm -r ./testdb");
 
 }
 
@@ -99,82 +53,6 @@ TEST_CASE("LevelDBBasicsTest", "HashStorageTest") {
   system("rm -r ./testdb");
 }
 
-/*TEST_CASE("LMDBAndFastPForTest", "HashStorageTest") {
-  int rc;
-  MDB_env *env;
-  MDB_dbi dbi;
-  MDB_val key_out, value_out, value_in;
-  MDB_txn *txn;
-  std::string k("test");
-
-  std::cout << "Creating original data" << std::endl;
-  size_t N = 2 * 1000000000;
-  //size_t N = 10 * 1000;
-  size_t step = 15000;
-  //size_t step = 150;
-  std::vector<uint32_t> mydata(N);
-  for(uint32_t i = 0; i < N;i += step) mydata[i] = i;
-  std::cout << "Finished creating original data" << std::endl;
-
-  std::cout << "Compressing original data" << std::endl;
-  std::vector<uint32_t> compressed_output = KMerge::compress(mydata), data_in;
-  std::cout << "Finished compressing original data" << std::endl;
-
-  rc = mdb_env_create(&env);
-  REQUIRE(rc == 0);
-  rc = mdb_env_set_mapsize(env, 500000000000);
-  REQUIRE(rc == 0);
-  system("mkdir -p ./testdb");
-  rc = mdb_env_open(env, "./testdb", 0, 0664);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_begin(env, NULL, 0, &txn);
-  REQUIRE(rc == 0);
-  rc = mdb_open(txn, NULL, 0, &dbi);
-  REQUIRE(rc == 0);
-
-  key_out.mv_size = k.size();
-  key_out.mv_data = &k[0];
-  value_out.mv_size = sizeof(uint)*compressed_output.size();
-  value_out.mv_data = &compressed_output[0];
-  uint comp_size = compressed_output.size();
-
-  std::cout << "Writing data" << std::endl;
-  rc = mdb_put(txn, dbi, &key_out, &value_out, 0);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_commit(txn);
-  std::cout << "Finished writing data" << std::endl;
-  compressed_output.clear();
-  std::vector<uint>().swap(compressed_output);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-  REQUIRE(rc == 0);
-  std::cout << "Getting data" << std::endl;
-  rc = mdb_get(txn, dbi, &key_out, &value_in);
-  REQUIRE(rc == 0);
-  rc = mdb_txn_commit(txn);
-  REQUIRE(rc == 0);
-  std::cout << "Finished getting data" << std::endl;
-  REQUIRE((int) value_in.mv_size == sizeof(uint)*comp_size);
-
-  compressed_output.assign((uint*) value_in.mv_data, (uint*) value_in.mv_data + comp_size);
-  std::cout << "Uncompressing data" << std::endl;
-  std::vector<uint32_t> mydataback = KMerge::uncompress(compressed_output, N);
-  std::cout << "Finished uncompressing data" << std::endl;
-  
-  //std::vector<uint> mydataback((uint*) value_in.mv_data, (uint*) (value_in.mv_data + N));
-  std::cout << "Checking data" << std::endl;
-  for (uint i = 0; i <= mydata.size(); i++) {
-    REQUIRE(mydata[i] == mydataback[i]);
-  }
-  std::cout << "Finished checking data" << std::endl;
-
-  std::cout << "Finishing up..." << std::endl;
-  mdb_close(env, dbi);
-  mdb_env_close(env);
-  system("rm -r ./testdb");
-}
-*/
-
 TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
   std::string key1("test"), value;
   std::stringstream ss_in, ss_out;
@@ -189,7 +67,8 @@ TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
 
   std::cout << "Generating original data" << std::endl;
 
-  size_t N = 4000000000;
+  uint N = 4000000050;
+  uint part_size = PARTITION_SIZE;
   size_t step = 15000;
   std::vector<uint> test;
   REQUIRE(test.max_size() > N);
@@ -198,37 +77,45 @@ TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
 
   std::cout << "Finished generating original data" << std::endl;
 
-  std::cout << "Compressing data" << std::endl;
-  std::vector<uint32_t> compressed = KMerge::compress(mydata);
-  std::cout << "Finished compressing data" << std::endl;
-
-  leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
   leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
   REQUIRE(status.ok() == true);
 
-  std::cout << "Writing data" << std::endl;
-  leveldb::Status s = db->Put(write_options, key1, sl);
-  REQUIRE(s.ok() == true);
-  std::cout << "Finished writing data" << std::endl;
-  sl.clear();
-  compressed.clear();
-  std::vector<uint>().swap(compressed);
+  std::cout << "Partitions: " << ceil((double)N/part_size) << endl;
+  for (uint i=0; i < ceil((double)N/part_size); i++) {
+    uint start_offset = i*part_size;
+    uint end_offset = (i+1)*part_size;
+    if (N - i*part_size < part_size) end_offset = N;
+    std::vector<uint> sub(mydata.begin() + start_offset, mydata.begin() + end_offset);
+    std::cout << "Compressing data" << std::endl;
+    std::vector<uint32_t> compressed = KMerge::compress(sub);
+    std::cout << "Finished compressing data" << std::endl;
+    
+    leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
 
-  std::cout << "Reading data" << std::endl;
-  s = db->Get(read_options, key1, &value);
-  REQUIRE(s.ok() == true);
-  std::cout << "Finished reading data" << std::endl;
+    std::cout << "Writing data for part " << i << std::endl;
+    leveldb::Status s = db->Put(write_options, key1 + std::string("part|") + std::to_string(i), sl);
+    REQUIRE(s.ok() == true);
+    std::cout << "Finished writing data" << std::endl;
+    sub.clear(); 
+  }
+  std::vector<uint32_t> mydataback;
+  for (uint i=0; i < ceil((double) N/part_size);i++) {
+    std::cout << "Reading data for " << i << std::endl;
+    leveldb::Status s = db->Get(read_options, key1 + std::string("part|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    std::cout << "Finished reading data" << std::endl;
   
-  std::cout << "Copying data" << std::endl;
-  compressed.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  std::cout << "Finished copying data" << std::endl;
+    std::cout << "Copying data" << std::endl;
+    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::cout << "Finished copying data" << std::endl;
 
-  std::cout << "Uncompressing data" << std::endl;
-  std::vector<uint32_t> mydataback = KMerge::uncompress(compressed, N);
-  std::cout << "Finished uncompressing data" << std::endl;
-  compressed.clear();
-  std::vector<uint>().swap(compressed);
-
+    std::cout << "Uncompressing data" << std::endl;
+    std::vector<uint32_t> sub = KMerge::uncompress(compressed, N);
+    std::cout << "Finished uncompressing data" << std::endl;
+    std::cout << "Appending data for " << i << std::endl;
+    mydataback.insert(mydataback.end(), sub.begin(), sub.end());
+    std::cout << "Finished appending data" << std::endl;
+  }
   std::cout << "Checking data" << std::endl;
   REQUIRE(mydata.size() == mydataback.size());
   for (uint i = 0; i <= mydataback.size(); i+=step) {
@@ -241,6 +128,79 @@ TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
   system("rm -r ./testdb");
 
 }
+
+TEST_CASE("LevelDBAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
+  std::string key1("test"), value;
+  std::stringstream ss_in, ss_out;
+  leveldb::DB* db;
+  leveldb::Options options;
+  options.create_if_missing = true;
+  options.paranoid_checks = true;
+  leveldb::WriteOptions write_options;
+  write_options.sync = true;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums = true;
+
+
+  std::cout << "Generating original data" << std::endl;
+
+  size_t N = 1352554547; // hash count causing failure in live runs
+  std::vector<uint32_t> mydata(N);
+  for(uint32_t i = 0; i < N; i++) mydata[i] = i;
+  uint part_size = PARTITION_SIZE;
+
+  std::cout << "Finished generating original data" << std::endl;
+
+  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
+  REQUIRE(status.ok() == true);
+
+  for (uint i=0; i < ceil((double)N/part_size); i++) {
+    uint start_offset = i*part_size;
+    uint end_offset = (i+1)*part_size;
+    if (N - i*part_size < part_size) end_offset = N;
+    std::vector<uint> sub(mydata.begin() + start_offset, mydata.begin() + end_offset);
+    std::cout << "Compressing data" << std::endl;
+    std::vector<uint32_t> compressed = KMerge::compress(sub);
+    std::cout << "Finished compressing data" << std::endl;
+    
+    leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
+
+    std::cout << "Writing data for part " << i << std::endl;
+    leveldb::Status s = db->Put(write_options, key1 + std::string("part|") + std::to_string(i), sl);
+    REQUIRE(s.ok() == true);
+    std::cout << "Finished writing data" << std::endl;
+    sub.clear();
+  }
+  std::vector<uint32_t> mydataback;
+  for (uint i=0; i < ceil((double) N/part_size);i++) {
+    std::cout << "Reading data for " << i << std::endl;
+    leveldb::Status s = db->Get(read_options, key1 + std::string("part|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    std::cout << "Finished reading data" << std::endl;
+  
+    std::cout << "Copying data" << std::endl;
+    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::cout << "Finished copying data" << std::endl;
+
+    std::cout << "Uncompressing data" << std::endl;
+    std::vector<uint32_t> sub = KMerge::uncompress(compressed, N);
+    std::cout << "Finished uncompressing data" << std::endl;
+    std::cout << "Appending data for " << i << std::endl;
+    mydataback.insert(mydataback.end(), sub.begin(), sub.end());
+    std::cout << "Finished appending data" << std::endl;
+  }
+
+
+  std::cout << "Checking data" << std::endl;
+  REQUIRE(mydata.size() == mydataback.size());
+  std::cout << "Finished checking data" << std::endl;
+
+  delete db;
+
+  system("rm -r ./testdb");
+
+}
+
 
 TEST_CASE("ChainedHashMap", "ConcurrentTest") {
   ulib::chain_hash_map<uint, uint> c_map(100000000);
@@ -636,7 +596,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
   REQUIRE(s.ok() == true);
 
-  kmerge->add_dataset_size(hashes_out.size(), params.group_name + std::string("|size"), params.db);  
+  kmerge->add_property(hashes_out.size(), params.group_name + std::string("|size"), params.db);  
   kmerge->add_dataset(hashes_out, params.group_name + std::string("|kmer_hash"), params.db);
   kmerge->add_dataset(counts_out, params.group_name + std::string("|count"), params.db);
 
@@ -708,29 +668,40 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
   REQUIRE(s.ok() == true);
 
-  s = db->Get(read_options, params.group_name + std::string("|size"), &value);
+  s = db->Get(read_options, params.group_name + std::string("|parts"), &value);
   REQUIRE(s.ok() == true);
-  uint uncompressed_size = std::stoul(value);
+  uint num_parts = std::stoul(value);
 
-  REQUIRE(uncompressed_size == 8727);
+  std::vector<uint> hashes_in, counts_in;
 
-  s = db->Get(read_options, params.group_name + std::string("|kmer_hash"), &value);
-  REQUIRE(s.ok() == true);
-  comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  std::vector<uint> hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
-  comp_hashes.clear();
-  std::vector<uint>().swap(comp_hashes);
+  for (uint i=0; i < num_parts; i++) {
+    
 
-  s = db->Get(read_options, params.group_name + std::string("|count"), &value);
-  REQUIRE(s.ok() == true);
-  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  std::vector<uint> counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
-  comp_counts.clear();
-  std::vector<uint>().swap(comp_counts);
+    s = db->Get(read_options, params.group_name + std::string("|size|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    uint uncompressed_size = std::stoul(value);
 
+    REQUIRE(uncompressed_size == 8727);
+
+    s = db->Get(read_options, params.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
+    comp_hashes.clear();
+    std::vector<uint>().swap(comp_hashes);
+    
+    s = db->Get(read_options, params.group_name + std::string("|count|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    comp_counts.clear();
+    std::vector<uint>().swap(comp_counts);
+    
+    hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
+    counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+  }
   REQUIRE(hashes_in.size() == 8727);
   REQUIRE(counts_in.size() == 8727);
-
   //ensure that hashes are in sorted order
   uint last = 0;
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
@@ -752,7 +723,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint> hashes_in, counts_in, comp_hashes, comp_counts;
-  uint kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos, uncompressed_size;
+  uint kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos, total_uncompressed_size;
   param_struct params1, params2, params3;
   std::map<std::string, std::string> taxonomy;
   std::string value, line;
@@ -830,17 +801,38 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
   kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
-  s = db->Get(read_options, params1.group_name + std::string("|size"), &value);
-  REQUIRE(s.ok() == true);
-  uncompressed_size = std::stoul(value);
 
-
-  s = db->Get(read_options, params1.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params1.group_name + std::string("|parts"), &value);
   REQUIRE(s.ok() == true);
-  comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
-  comp_hashes.clear();
-  std::vector<uint>().swap(comp_hashes);
+  uint num_parts = std::stoul(value);
+
+  total_uncompressed_size = 0;
+  for (uint i=0; i < num_parts; i++) {
+    
+
+    s = db->Get(read_options, params1.group_name + std::string("|size|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    uint uncompressed_size = std::stoul(value);
+
+    total_uncompressed_size += uncompressed_size;
+
+    s = db->Get(read_options, params1.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
+    comp_hashes.clear();
+    std::vector<uint>().swap(comp_hashes);
+    
+    s = db->Get(read_options, params1.group_name + std::string("|count|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    comp_counts.clear();
+    std::vector<uint>().swap(comp_counts);
+    
+    hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
+    counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+  }
 
   //ensure that hashes are in sorted order
   uint last = 0;
@@ -851,15 +843,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     last = *v_iter;
   }
 
-  ss_in.str("");
-  s = db->Get(read_options, params1.group_name + std::string("|count"), &value);
-  REQUIRE(s.ok() == true);
-  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
-  comp_counts.clear();
-  std::vector<uint>().swap(comp_counts);
-
-  for (pos = 0; pos < uncompressed_size; pos++) {
+  for (pos = 0; pos < total_uncompressed_size; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -868,12 +852,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     }
   }
 
+
   REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
   REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
-  ss_in.str("");
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();
@@ -912,17 +896,41 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 2147 /*AAAAA*/ + 1919 /*TTTTT*/;
   kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
 
-  s = db->Get(read_options, params2.group_name + std::string("|size"), &value);
-  REQUIRE(s.ok() == true);
-  uncompressed_size = std::stoul(value);
 
 
-  s = db->Get(read_options, params2.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params2.group_name + std::string("|parts"), &value);
   REQUIRE(s.ok() == true);
-  comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
-  comp_hashes.clear();
-  std::vector<uint>().swap(comp_hashes);
+  num_parts = std::stoul(value);
+
+  total_uncompressed_size = 0;
+  for (uint i=0; i < num_parts; i++) {
+    
+
+    s = db->Get(read_options, params2.group_name + std::string("|size|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    uint uncompressed_size = std::stoul(value);
+
+    total_uncompressed_size += uncompressed_size;
+
+    s = db->Get(read_options, params2.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
+    comp_hashes.clear();
+    std::vector<uint>().swap(comp_hashes);
+    
+    s = db->Get(read_options, params2.group_name + std::string("|count|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    comp_counts.clear();
+    std::vector<uint>().swap(comp_counts);
+    
+    hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
+    counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+  }
+
+
 
   //ensure that hashes are in sorted order
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
@@ -932,15 +940,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     last = *v_iter;
   }
 
-  ss_in.str("");
-  s = db->Get(read_options, params2.group_name + std::string("|count"), &value);
-  REQUIRE(s.ok() == true);
-  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
-  comp_counts.clear();
-  std::vector<uint>().swap(comp_counts);
-
-  for (pos = 0; pos < uncompressed_size; pos++) {
+  for (pos = 0; pos < total_uncompressed_size; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -954,7 +954,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
-  ss_in.str("");
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();
@@ -991,17 +990,38 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 9896 /*AAAAA*/ + 9505 /*TTTTT*/;
   kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
 
-  s = db->Get(read_options, params3.group_name + std::string("|size"), &value);
-  REQUIRE(s.ok() == true);
-  uncompressed_size = std::stoul(value);
 
-
-  s = db->Get(read_options, params3.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params3.group_name + std::string("|parts"), &value);
   REQUIRE(s.ok() == true);
-  comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
-  comp_hashes.clear();
-  std::vector<uint>().swap(comp_hashes);
+  num_parts = std::stoul(value);
+
+  total_uncompressed_size = 0;
+  for (uint i=0; i < num_parts; i++) {
+    
+
+    s = db->Get(read_options, params3.group_name + std::string("|size|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    uint uncompressed_size = std::stoul(value);
+    total_uncompressed_size += uncompressed_size;
+
+    s = db->Get(read_options, params3.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
+    comp_hashes.clear();
+    std::vector<uint>().swap(comp_hashes);
+    
+    s = db->Get(read_options, params3.group_name + std::string("|count|") + std::to_string(i), &value);
+    REQUIRE(s.ok() == true);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    comp_counts.clear();
+    std::vector<uint>().swap(comp_counts);
+    
+    hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
+    counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+  }
+
 
   //ensure that hashes are in sorted order
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
@@ -1011,15 +1031,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     last = *v_iter;
   }
 
-  ss_in.str("");
-  s = db->Get(read_options, params3.group_name + std::string("|count"), &value);
-  REQUIRE(s.ok() == true);
-  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
-  comp_counts.clear();
-  std::vector<uint>().swap(comp_counts);
 
-  for (pos = 0; pos < uncompressed_size; pos++) {
+  for (pos = 0; pos < total_uncompressed_size; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -1033,7 +1046,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
-  ss_in.str("");
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();

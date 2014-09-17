@@ -10,11 +10,11 @@
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
 #include "leveldb/db.h"
-#include "lmdb.h"
 
 KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
+#define PARTITION_SIZE 1000000000
 
 using namespace std;
 
@@ -58,7 +58,7 @@ class KMerge {
   static std::vector<uint> uncompress(const std::vector<uint>&, uint);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
-  bool add_dataset_size(uint, const std::string&, leveldb::DB*);
+  bool add_property(uint, const std::string&, leveldb::DB*);
   bool add_dataset(const std::vector<uint>&, const std::string&, leveldb::DB*);
   bool add_dataset(const uint, const uint*, param_struct&);
   bool add_taxonomy(const std::string&, leveldb::DB*);
