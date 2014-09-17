@@ -184,6 +184,8 @@ TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
   options.paranoid_checks = true;
   leveldb::WriteOptions write_options;
   write_options.sync = true;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums = true;
 
   std::cout << "Generating original data" << std::endl;
 
@@ -213,7 +215,7 @@ TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
   std::vector<uint>().swap(compressed);
 
   std::cout << "Reading data" << std::endl;
-  s = db->Get(leveldb::ReadOptions(), key1, &value);
+  s = db->Get(read_options, key1, &value);
   REQUIRE(s.ok() == true);
   std::cout << "Finished reading data" << std::endl;
   
@@ -595,6 +597,9 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   
   leveldb::Options options;
   options.create_if_missing = true;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums= true;
+
 
 
   KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".");
@@ -637,11 +642,11 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 
   delete kmerge;
 
-  s = params.db->Get(leveldb::ReadOptions(), params.group_name + std::string("|size"), &value);
+  s = params.db->Get(read_options, params.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
   uint uncompressed_size = std::stoul(value);
 
-  s = params.db->Get(leveldb::ReadOptions(), params.group_name + std::string("|kmer_hash"), &value);
+  s = params.db->Get(read_options, params.group_name + std::string("|kmer_hash"), &value);
   REQUIRE(s.ok() == true);
   comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   std::vector<uint> hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
@@ -649,7 +654,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint>().swap(comp_hashes);
 
   ss_in.str("");
-  s = params.db->Get(leveldb::ReadOptions(), params.group_name + std::string("|count"), &value);
+  s = params.db->Get(read_options, params.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   std::vector<uint> counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
@@ -678,6 +683,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   std::vector<uint> comp_hashes, comp_counts;
   leveldb::Options options;
   options.create_if_missing = true;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums= true;
+
 
   params.k_val_start = 3;
   params.k_val_end = 7;
@@ -700,20 +708,20 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
   REQUIRE(s.ok() == true);
 
-  s = db->Get(leveldb::ReadOptions(), params.group_name + std::string("|size"), &value);
+  s = db->Get(read_options, params.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
   uint uncompressed_size = std::stoul(value);
 
   REQUIRE(uncompressed_size == 8727);
 
-  s = db->Get(leveldb::ReadOptions(), params.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params.group_name + std::string("|kmer_hash"), &value);
   REQUIRE(s.ok() == true);
   comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   std::vector<uint> hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
   comp_hashes.clear();
   std::vector<uint>().swap(comp_hashes);
 
-  s = db->Get(leveldb::ReadOptions(), params.group_name + std::string("|count"), &value);
+  s = db->Get(read_options, params.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   std::vector<uint> counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
@@ -755,6 +763,10 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   const string kmer2("GCGAT");
   leveldb::Options options;
   options.create_if_missing = true;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums= true;
+
+
 
   params1.k_val_start = 5;
   params1.k_val_end = 5;
@@ -818,12 +830,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
   kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
-  s = db->Get(leveldb::ReadOptions(), params1.group_name + std::string("|size"), &value);
+  s = db->Get(read_options, params1.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
   uncompressed_size = std::stoul(value);
 
 
-  s = db->Get(leveldb::ReadOptions(), params1.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params1.group_name + std::string("|kmer_hash"), &value);
   REQUIRE(s.ok() == true);
   comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
@@ -840,7 +852,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   }
 
   ss_in.str("");
-  s = db->Get(leveldb::ReadOptions(), params1.group_name + std::string("|count"), &value);
+  s = db->Get(read_options, params1.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
@@ -868,7 +880,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint>().swap(counts_in);
  
  
-  s = db->Get(leveldb::ReadOptions(), params1.group_name + std::string("|taxonomy"), &value);
+  s = db->Get(read_options, params1.group_name + std::string("|taxonomy"), &value);
   REQUIRE(s.ok() == true);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
@@ -900,12 +912,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 2147 /*AAAAA*/ + 1919 /*TTTTT*/;
   kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
 
-  s = db->Get(leveldb::ReadOptions(), params2.group_name + std::string("|size"), &value);
+  s = db->Get(read_options, params2.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
   uncompressed_size = std::stoul(value);
 
 
-  s = db->Get(leveldb::ReadOptions(), params2.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params2.group_name + std::string("|kmer_hash"), &value);
   REQUIRE(s.ok() == true);
   comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
@@ -921,7 +933,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   }
 
   ss_in.str("");
-  s = db->Get(leveldb::ReadOptions(), params2.group_name + std::string("|count"), &value);
+  s = db->Get(read_options, params2.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
@@ -948,7 +960,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
 
-  s = db->Get(leveldb::ReadOptions(), params2.group_name + std::string("|taxonomy"), &value);
+  s = db->Get(read_options, params2.group_name + std::string("|taxonomy"), &value);
   REQUIRE(s.ok() == true);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
@@ -979,12 +991,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 9896 /*AAAAA*/ + 9505 /*TTTTT*/;
   kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
 
-  s = db->Get(leveldb::ReadOptions(), params3.group_name + std::string("|size"), &value);
+  s = db->Get(read_options, params3.group_name + std::string("|size"), &value);
   REQUIRE(s.ok() == true);
   uncompressed_size = std::stoul(value);
 
 
-  s = db->Get(leveldb::ReadOptions(), params3.group_name + std::string("|kmer_hash"), &value);
+  s = db->Get(read_options, params3.group_name + std::string("|kmer_hash"), &value);
   REQUIRE(s.ok() == true);
   comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
@@ -1000,7 +1012,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   }
 
   ss_in.str("");
-  s = db->Get(leveldb::ReadOptions(), params3.group_name + std::string("|count"), &value);
+  s = db->Get(read_options, params3.group_name + std::string("|count"), &value);
   REQUIRE(s.ok() == true);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
   counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
@@ -1027,7 +1039,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
 
-  s = db->Get(leveldb::ReadOptions(), params3.group_name + std::string("|taxonomy"), &value);
+  s = db->Get(read_options, params3.group_name + std::string("|taxonomy"), &value);
   REQUIRE(s.ok() == true);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
@@ -1123,6 +1135,8 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   std::string line, value;
   std::stringstream ss_in, ss_delete;
   std::map<std::string, std::string> taxonomy;
+  leveldb::ReadOptions read_options;
+  read_options.verify_checksums = true;
 
   leveldb::DB* db;
   leveldb::Options options;
@@ -1139,7 +1153,7 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   delete kmerge;
 
    
-  s = db->Get(leveldb::ReadOptions(), group + std::string("|taxonomy"), &value);
+  s = db->Get(read_options, group + std::string("|taxonomy"), &value);
   REQUIRE(s.ok() == true);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
