@@ -10,6 +10,7 @@
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
 #include "leveldb/db.h"
+#include "lmdb.h"
 
 KSEQ_INIT(gzFile, gzread)
 

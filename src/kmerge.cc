@@ -143,7 +143,6 @@ std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed_output,
   FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
   std::vector<uint32_t> data(uncompressed_length);
   size_t recoveredsize = data.size();
-
   codec.decodeArray(compressed_output.data(),
                     compressed_output.size(), data.data(), recoveredsize);
   data.resize(recoveredsize);
@@ -192,9 +191,9 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, 
 
   this->dlog << dlib::LINFO << "Finished compressing data for " << key;
 
-  dlib::serialize(compressed, ss_out);
+  leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
 
-  leveldb::Status s = db->Put(write_options, key, ss_out.str());
+  leveldb::Status s = db->Put(write_options, key, sl);
   if (!s.ok()) {
     this->dlog << dlib::LERROR << "Unable to write data for " << key << ": " << s.ToString();
     return false;
@@ -263,6 +262,7 @@ void KMerge::build(param_struct& params) {
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
   leveldb::Options options;
   options.create_if_missing = true;
+  options.paranoid_checks = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
@@ -346,6 +346,7 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint> hashes, counts;
   leveldb::Options options;
   options.create_if_missing = true;
+  options.paranoid_checks = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
