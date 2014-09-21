@@ -10,6 +10,7 @@
 #include <dlib/logger.h>
 #include <iomanip>
 #include <sys/stat.h>
+#include <chrono>
 #include <random>
 
 TEST_CASE("CompressHashesTest", "CompressionTest") {
@@ -33,113 +34,105 @@ TEST_CASE("CompressHashesTest", "CompressionTest") {
 }
 
 
-TEST_CASE("LevelDBBasicsTest", "HashStorageTest") {
+TEST_CASE("UnQLiteBasicsTest", "HashStorageTest") {
   std::string key1("test"), value;
   uint value_out = 1, value_in;
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
-  REQUIRE(status.ok() == true);
+  unqlite *db;
+  int rc;
+  unqlite_int64 n_bytes = sizeof(uint);
 
-  leveldb::Slice sl = leveldb::Slice((char*) &value_out, sizeof(uint));
-  leveldb::Status s = db->Put(leveldb::WriteOptions(), key1, sl);
-  REQUIRE(s.ok() == true);
-  s = db->Get(leveldb::ReadOptions(), key1, &value);
-  REQUIRE(s.ok() == true);
-  REQUIRE(*((uint*)value.data()) == 1);
-  delete db;
+  rc = unqlite_open(&db,"test.db", UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
-  system("rm -r ./testdb");
+  rc = unqlite_kv_store(db,key1.c_str(),-1,&value_out,sizeof(uint));
+  REQUIRE(rc == UNQLITE_OK);
+
+  rc = unqlite_kv_fetch(db,key1.c_str(),-1,&value_in, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+
+  REQUIRE(value_in == 1);
+  unqlite_close(db);
+
+  if( remove( "test.db" ) != 0 )
+    perror( "Error deleting file" );
+
 }
 
-TEST_CASE("LevelDBAndFastPForTest", "HashStorageTest") {
-  std::string key1("test"), value;
+
+TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
+  std::string key1("test");
   std::stringstream ss_in, ss_out;
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-  options.paranoid_checks = true;
-  leveldb::WriteOptions write_options;
-  write_options.sync = true;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums = true;
+  unqlite *db;
+  int rc;
+  unqlite_int64 n_bytes;
+  uint * value;
 
   std::cout << "Generating original data" << std::endl;
 
   uint N = 4000000050;
-  uint part_size = PARTITION_SIZE;
-  size_t step = 15000;
-  std::vector<uint> test;
-  REQUIRE(test.max_size() > N);
+  size_t step = 1500;
+  //std::vector<uint> test;
+  //REQUIRE(test.max_size() > N);
   std::vector<uint32_t> mydata(N);
   for(uint32_t i = 0; i < N;i += step) mydata[i] = i;
 
   std::cout << "Finished generating original data" << std::endl;
 
-  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
-  REQUIRE(status.ok() == true);
 
-  std::cout << "Partitions: " << ceil((double)N/part_size) << endl;
-  for (uint i=0; i < ceil((double)N/part_size); i++) {
-    uint start_offset = i*part_size;
-    uint end_offset = (i+1)*part_size;
-    if (N - i*part_size < part_size) end_offset = N;
-    std::vector<uint> sub(mydata.begin() + start_offset, mydata.begin() + end_offset);
-    std::cout << "Compressing data" << std::endl;
-    std::vector<uint32_t> compressed = KMerge::compress(sub);
-    std::cout << "Finished compressing data" << std::endl;
-    
-    leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
+  rc = unqlite_open(&db,"test.db", UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
-    std::cout << "Writing data for part " << i << std::endl;
-    leveldb::Status s = db->Put(write_options, key1 + std::string("part|") + std::to_string(i), sl);
-    REQUIRE(s.ok() == true);
-    std::cout << "Finished writing data" << std::endl;
-    sub.clear(); 
-  }
-  std::vector<uint32_t> mydataback;
-  for (uint i=0; i < ceil((double) N/part_size);i++) {
-    std::cout << "Reading data for " << i << std::endl;
-    leveldb::Status s = db->Get(read_options, key1 + std::string("part|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    std::cout << "Finished reading data" << std::endl;
+  std::cout << "Compressing data" << std::endl;
+  std::vector<uint32_t> compressed = KMerge::compress(mydata);
+  std::cout << "Finished compressing data" << std::endl;    
+
+  std::cout << "Writing data" << std::endl;
+  uint comp_size = compressed.size();
+  rc = unqlite_kv_store(db,key1.c_str(),-1,&compressed[0],sizeof(uint)*compressed.size());
+  REQUIRE(rc == UNQLITE_OK);
+  std::cout << "Finished writing data" << std::endl; 
+  compressed.clear();
+  std::vector<uint>().swap(compressed);
+
+  std::cout << "Reading data" << std::endl;
+  n_bytes = sizeof(uint)*comp_size;
+  value = new uint [comp_size];
+  rc = unqlite_kv_fetch(db,key1.c_str(),-1, value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+
+  std::cout << "Finished reading data" << std::endl;
   
-    std::cout << "Copying data" << std::endl;
-    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::cout << "Finished copying data" << std::endl;
+  std::cout << "Copying data" << std::endl;
+  compressed.assign((uint*) &value[0], (uint*) &value[0] + comp_size);
+  std::cout << "Finished copying data" << std::endl;
+  delete [] value;
+  std::cout << "Uncompressing data" << std::endl;
+  std::vector<uint32_t> mydataback = KMerge::uncompress(compressed, N);
+  std::cout << "Finished uncompressing data" << std::endl;
 
-    std::cout << "Uncompressing data" << std::endl;
-    std::vector<uint32_t> sub = KMerge::uncompress(compressed, N);
-    std::cout << "Finished uncompressing data" << std::endl;
-    std::cout << "Appending data for " << i << std::endl;
-    mydataback.insert(mydataback.end(), sub.begin(), sub.end());
-    std::cout << "Finished appending data" << std::endl;
-  }
   std::cout << "Checking data" << std::endl;
   REQUIRE(mydata.size() == mydataback.size());
+
   for (uint i = 0; i <= mydataback.size(); i+=step) {
     REQUIRE(mydataback[i] == i);
   }
   std::cout << "Finished checking data" << std::endl;
 
-  delete db;
+  unqlite_close(db);
 
-  system("rm -r ./testdb");
+  if( remove( "test.db" ) != 0 )
+    perror( "Error deleting file" );
 
 }
 
-TEST_CASE("LevelDBAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
-  std::string key1("test"), value;
+TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
+  std::string key1("test");
   std::stringstream ss_in, ss_out;
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-  options.paranoid_checks = true;
-  leveldb::WriteOptions write_options;
-  write_options.sync = true;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums = true;
+  unqlite *db;
+  int rc;
+  std::vector<uint> comp_size;
+  unqlite_int64 n_bytes;
+  uint * value;
 
 
   std::cout << "Generating original data" << std::endl;
@@ -147,12 +140,11 @@ TEST_CASE("LevelDBAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
   size_t N = 1352554547; // hash count causing failure in live runs
   std::vector<uint32_t> mydata(N);
   for(uint32_t i = 0; i < N; i++) mydata[i] = i;
-  uint part_size = PARTITION_SIZE;
-
+  uint part_size = 500000000;
   std::cout << "Finished generating original data" << std::endl;
 
-  leveldb::Status status = leveldb::DB::Open(options, "./testdb", &db);
-  REQUIRE(status.ok() == true);
+  rc = unqlite_open(&db,"test.db", UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
   for (uint i=0; i < ceil((double)N/part_size); i++) {
     uint start_offset = i*part_size;
@@ -162,26 +154,28 @@ TEST_CASE("LevelDBAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
     std::cout << "Compressing data" << std::endl;
     std::vector<uint32_t> compressed = KMerge::compress(sub);
     std::cout << "Finished compressing data" << std::endl;
-    
-    leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
+    comp_size.push_back(compressed.size());
 
     std::cout << "Writing data for part " << i << std::endl;
-    leveldb::Status s = db->Put(write_options, key1 + std::string("part|") + std::to_string(i), sl);
-    REQUIRE(s.ok() == true);
+    rc = unqlite_kv_store(db,(key1 + std::string("part|") + std::to_string(i)).c_str(),-1,&compressed[0],sizeof(uint)*comp_size[i]);
+    REQUIRE(rc == UNQLITE_OK);
     std::cout << "Finished writing data" << std::endl;
     sub.clear();
   }
   std::vector<uint32_t> mydataback;
   for (uint i=0; i < ceil((double) N/part_size);i++) {
     std::cout << "Reading data for " << i << std::endl;
-    leveldb::Status s = db->Get(read_options, key1 + std::string("part|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
+    n_bytes = comp_size[i]*sizeof(uint);
+    value = new uint [comp_size[i]];
+    rc = unqlite_kv_fetch(db,(key1 + std::string("part|") + std::to_string(i)).c_str(),-1, value, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
     std::cout << "Finished reading data" << std::endl;
-  
+   
     std::cout << "Copying data" << std::endl;
-    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
+    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + n_bytes/sizeof(uint));
     std::cout << "Finished copying data" << std::endl;
 
+    delete [] value;
     std::cout << "Uncompressing data" << std::endl;
     std::vector<uint32_t> sub = KMerge::uncompress(compressed, N);
     std::cout << "Finished uncompressing data" << std::endl;
@@ -195,9 +189,10 @@ TEST_CASE("LevelDBAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
   REQUIRE(mydata.size() == mydataback.size());
   std::cout << "Finished checking data" << std::endl;
 
-  delete db;
+  unqlite_close(db);
 
-  system("rm -r ./testdb");
+  if( remove( "test.db" ) != 0 )
+    perror( "Error deleting file" );
 
 }
 
@@ -472,10 +467,6 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
-
 
   KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".");
   params.kmerge = kmerge;
@@ -529,7 +520,7 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
 }
 
 TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
-  std::vector<uint> hashes_out, comp_hashes;
+  std::vector<uint> hashes_out;
   std::vector<uint> counts_out, comp_counts;
   ulib::chain_hash_map<uint, uint> hashed_counts(1000000);
   const string kmer1("AAAAA");
@@ -539,9 +530,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   uint kmer1_pos = 0;
   uint kmer2_pos = 0;
   uint pos = 0;
-  std::string value;
   param_struct params;
-  std::stringstream ss_in, ss_delete;
 
 
   params.k_val_start = 5;
@@ -555,11 +544,6 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 
   params.seq_filename ="/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   
-  leveldb::Options options;
-  options.create_if_missing = true;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums= true;
-
 
 
   KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".");
@@ -593,58 +577,61 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(hashes_out[kmer1_pos] == kmerge->hash_kmer(kmer2));
   REQUIRE(counts_out[kmer2_pos] == kmer1_count + kmer2_count);
 
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
-  REQUIRE(s.ok() == true);
 
-  kmerge->add_property(hashes_out.size(), params.group_name + std::string("|size"), params.db);  
-  kmerge->add_dataset(hashes_out, params.group_name + std::string("|kmer_hash"), params.db);
-  kmerge->add_dataset(counts_out, params.group_name + std::string("|count"), params.db);
+  int rc = unqlite_open(&(params.db), params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
+
+
+  kmerge->add_dataset(hashes_out, params.group_name + std::string("|kmer_hash"), params.db, false);
+  kmerge->add_dataset(counts_out, params.group_name + std::string("|count"), params.db, true);
 
   delete kmerge;
 
-  s = params.db->Get(read_options, params.group_name + std::string("|size"), &value);
-  REQUIRE(s.ok() == true);
-  uint uncompressed_size = std::stoul(value);
+  unqlite_int64 n_bytes;
+  n_bytes = sizeof(uint);
+  uint size;
+  rc = unqlite_kv_fetch(params.db,(params.group_name + std::string("|kmer_hash|size")).c_str(),-1, &size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
-  s = params.db->Get(read_options, params.group_name + std::string("|kmer_hash"), &value);
-  REQUIRE(s.ok() == true);
-  comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  std::vector<uint> hashes_in = KMerge::uncompress(comp_hashes, uncompressed_size);
-  comp_hashes.clear();
-  std::vector<uint>().swap(comp_hashes);
-
-  ss_in.str("");
-  s = params.db->Get(read_options, params.group_name + std::string("|count"), &value);
-  REQUIRE(s.ok() == true);
-  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-  std::vector<uint> counts_in = KMerge::uncompress(comp_counts, uncompressed_size);
+  uint *value = new uint[size];
+  n_bytes = size*sizeof(uint);
+  rc = unqlite_kv_fetch(params.db,(params.group_name + std::string("|kmer_hash")).c_str(),-1,value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+  std::vector<uint> hashes_in;
+  hashes_in.assign((uint*) &value[0], (uint*) &value[0] + size);
+  delete value;
+ 
+  n_bytes = sizeof(uint);
+  uint compressed_size;
+  rc = unqlite_kv_fetch(params.db,(params.group_name + std::string("|count|size")).c_str(),-1, &compressed_size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+  value = new uint[compressed_size];
+  n_bytes = sizeof(uint)*compressed_size;
+  rc = unqlite_kv_fetch(params.db,(params.group_name + std::string("|count")).c_str(),-1,value, &n_bytes);
+  comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
+  std::vector<uint> counts_in = KMerge::uncompress(comp_counts, size);
   comp_counts.clear();
   std::vector<uint>().swap(comp_counts);
+  delete value;
 
-  delete params.db;
+  unqlite_close(params.db);
+
 
   for (pos = 0; pos < hashes_in.size(); pos++) {
     REQUIRE(hashes_out[pos] == hashes_in[pos]);
     REQUIRE(counts_out[pos] == counts_in[pos]);
   }
 
-  ss_delete << "rm " << params.db_filename << "/*";
-  system(ss_delete.str().c_str());
-  ss_delete.str("");
-  ss_delete << "rm -r " << params.db_filename;
-  system(ss_delete.str().c_str());
-}
+  if( remove( params.db_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
 
+}
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   param_struct params;
   std::string value;
   std::stringstream ss_delete;
   std::vector<uint> comp_hashes, comp_counts;
-  leveldb::Options options;
-  options.create_if_missing = true;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums= true;
 
 
   params.k_val_start = 3;
@@ -664,38 +651,47 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
 
   delete kmerge;
 
-  leveldb::DB* db;
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &db);
-  REQUIRE(s.ok() == true);
+  unqlite *db;
+  int rc = unqlite_open(&db, params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
-  s = db->Get(read_options, params.group_name + std::string("|parts"), &value);
-  REQUIRE(s.ok() == true);
-  uint num_parts = std::stoul(value);
+  unqlite_int64 n_bytes;
+  n_bytes = sizeof(uint);
+  uint num_parts;
+  rc = unqlite_kv_fetch(db, (params.group_name + std::string("|parts")).c_str(), -1, &num_parts, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
   std::vector<uint> hashes_in, counts_in;
 
   for (uint i=0; i < num_parts; i++) {
-    
+    n_bytes = sizeof(uint);
+    uint size;
+    rc = unqlite_kv_fetch(db,(params.group_name + std::string("|kmer_hash|") + std::to_string(i) + std::string("|size")).c_str(),-1, &size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
 
-    s = db->Get(read_options, params.group_name + std::string("|size|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    uint uncompressed_size = std::stoul(value);
+    REQUIRE(size == 8727);
 
-    REQUIRE(uncompressed_size == 8727);
+    uint *value = new uint[size];
+    n_bytes = size*sizeof(uint);
+    rc = unqlite_kv_fetch(db,(params.group_name + std::string("|kmer_hash|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    std::vector<uint> part_hashes;
+    part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
+    delete value;
 
-    s = db->Get(read_options, params.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
-    comp_hashes.clear();
-    std::vector<uint>().swap(comp_hashes);
-    
-    s = db->Get(read_options, params.group_name + std::string("|count|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    n_bytes = sizeof(uint);
+    uint compressed_size;
+    rc = unqlite_kv_fetch(db,(params.group_name + std::string("|count|") + std::to_string(i) + std::string("|size")).c_str(),-1, &compressed_size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    value = new uint[compressed_size];
+    n_bytes = sizeof(uint)*compressed_size;
+    rc = unqlite_kv_fetch(db,(params.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
+    delete value;
+
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
@@ -711,31 +707,29 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
     last = *v_iter;
   }
 
-  delete db;
+  unqlite_close(db);
 
-  ss_delete << "rm " << params.db_filename << "/*";
-  system(ss_delete.str().c_str());
-  ss_delete.str("");
-  ss_delete << "rm -r " << params.db_filename;
-  system(ss_delete.str().c_str());
+  if( remove( params.db_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
 
 }
+
+
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint> hashes_in, counts_in, comp_hashes, comp_counts;
   uint kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos, total_uncompressed_size;
   param_struct params1, params2, params3;
   std::map<std::string, std::string> taxonomy;
-  std::string value, line;
+  std::string line;
+  char* value;
   ifstream in_file;
   std::stringstream ss_in, ss_delete;
+  unqlite_int64 n_bytes;
+  uint num_parts;
 
   const string kmer1("AAAAA");
   const string kmer2("GCGAT");
-  leveldb::Options options;
-  options.create_if_missing = true;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums= true;
 
 
 
@@ -792,46 +786,49 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
   delete kmerge;
 
-  leveldb::DB* db;
-
-  leveldb::Status s = leveldb::DB::Open(options, params1.db_filename, &db);
-  REQUIRE(s.ok() == true);
-
+  unqlite *db;
+  int rc = unqlite_open(&db, params1.db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
   kmer1_count = 6150 /*AAAAA*/ + 6021 /*TTTTT*/;
   kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
+  n_bytes = sizeof(uint);
+  rc = unqlite_kv_fetch(db, (params1.group_name + std::string("|parts")).c_str(), -1, &num_parts, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
-  s = db->Get(read_options, params1.group_name + std::string("|parts"), &value);
-  REQUIRE(s.ok() == true);
-  uint num_parts = std::stoul(value);
-
-  total_uncompressed_size = 0;
   for (uint i=0; i < num_parts; i++) {
-    
+    n_bytes = sizeof(uint);
+    uint size;
+    rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|kmer_hash|") + std::to_string(i) + std::string("|size")).c_str(),-1, &size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
 
-    s = db->Get(read_options, params1.group_name + std::string("|size|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    uint uncompressed_size = std::stoul(value);
 
-    total_uncompressed_size += uncompressed_size;
+    uint *value = new uint[size];
+    n_bytes = size*sizeof(uint);
+    rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|kmer_hash|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    std::vector<uint> part_hashes;
+    part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
+    delete value;
 
-    s = db->Get(read_options, params1.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
-    comp_hashes.clear();
-    std::vector<uint>().swap(comp_hashes);
-    
-    s = db->Get(read_options, params1.group_name + std::string("|count|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    n_bytes = sizeof(uint);
+    uint compressed_size;
+    rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|count|") + std::to_string(i) + std::string("|size")).c_str(),-1, &compressed_size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    value = new uint[compressed_size];
+    n_bytes = sizeof(uint)*compressed_size;
+    rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
+    delete value;
+
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+    
   }
 
   //ensure that hashes are in sorted order
@@ -843,7 +840,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     last = *v_iter;
   }
 
-  for (pos = 0; pos < total_uncompressed_size; pos++) {
+  for (pos = 0; pos < 512 /*3^5*/; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -863,12 +860,19 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
  
- 
-  s = db->Get(read_options, params1.group_name + std::string("|taxonomy"), &value);
-  REQUIRE(s.ok() == true);
-  ss_in << value;
-  dlib::deserialize(taxonomy, ss_in);
+  n_bytes = sizeof(uint);
+  uint size;
+  rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
+
+  n_bytes = size;
+  char* tax_value = new char[size];
+  rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|taxonomy")).c_str(),-1, tax_value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+  ss_in << tax_value;
+  dlib::deserialize(taxonomy, ss_in);
+  delete tax_value;
 
   in_file.open("/home/darryl/Development/kmerge/tests/208831/taxonomy.txt");
 
@@ -896,38 +900,41 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 2147 /*AAAAA*/ + 1919 /*TTTTT*/;
   kmer2_count = 12082 /*GCGAT*/ + 12213 /*ATCGC*/;
 
+  n_bytes = sizeof(uint);
+  rc = unqlite_kv_fetch(db, (params2.group_name + std::string("|parts")).c_str(), -1, &num_parts, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
-
-  s = db->Get(read_options, params2.group_name + std::string("|parts"), &value);
-  REQUIRE(s.ok() == true);
-  num_parts = std::stoul(value);
-
-  total_uncompressed_size = 0;
   for (uint i=0; i < num_parts; i++) {
-    
+    n_bytes = sizeof(uint);
+    uint size;
+    rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|kmer_hash|") + std::to_string(i) + std::string("|size")).c_str(),-1, &size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
 
-    s = db->Get(read_options, params2.group_name + std::string("|size|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    uint uncompressed_size = std::stoul(value);
+    uint *value = new uint[size];
+    n_bytes = size*sizeof(uint);
+    rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|kmer_hash|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    std::vector<uint> part_hashes;
+    part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
+    delete value;
 
-    total_uncompressed_size += uncompressed_size;
-
-    s = db->Get(read_options, params2.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
-    comp_hashes.clear();
-    std::vector<uint>().swap(comp_hashes);
-    
-    s = db->Get(read_options, params2.group_name + std::string("|count|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    n_bytes = sizeof(uint);
+    uint compressed_size;
+    rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|count|") + std::to_string(i) + std::string("|size")).c_str(),-1, &compressed_size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    value = new uint[compressed_size];
+    n_bytes = sizeof(uint)*compressed_size;
+    rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
+    delete value;
+
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
+    
   }
 
 
@@ -940,7 +947,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     last = *v_iter;
   }
 
-  for (pos = 0; pos < total_uncompressed_size; pos++) {
+  for (pos = 0; pos < 512 /*3^5*/; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -959,10 +966,19 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
 
-  s = db->Get(read_options, params2.group_name + std::string("|taxonomy"), &value);
-  REQUIRE(s.ok() == true);
-  ss_in << value;
+  n_bytes = sizeof(uint);
+  rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+
+  ss_in.str("");
+  n_bytes = size;
+  tax_value = new char[size];
+  rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|taxonomy")).c_str(),-1, tax_value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+  ss_in << tax_value;
   dlib::deserialize(taxonomy, ss_in);
+  delete tax_value;
+
 
   in_file.open("/home/darryl/Development/kmerge/tests/209328/taxonomy.txt");
 
@@ -990,33 +1006,37 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer1_count = 9896 /*AAAAA*/ + 9505 /*TTTTT*/;
   kmer2_count = 733 /*GCGAT*/ + 750 /*ATCGC*/;
 
+  n_bytes = sizeof(uint);
+  rc = unqlite_kv_fetch(db, (params3.group_name + std::string("|parts")).c_str(), -1, &num_parts, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
 
-  s = db->Get(read_options, params3.group_name + std::string("|parts"), &value);
-  REQUIRE(s.ok() == true);
-  num_parts = std::stoul(value);
-
-  total_uncompressed_size = 0;
   for (uint i=0; i < num_parts; i++) {
-    
+    n_bytes = sizeof(uint);
+    uint size;
+    rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|kmer_hash|") + std::to_string(i) + std::string("|size")).c_str(),-1, &size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
 
-    s = db->Get(read_options, params3.group_name + std::string("|size|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    uint uncompressed_size = std::stoul(value);
-    total_uncompressed_size += uncompressed_size;
+    uint *value = new uint[size];
+    n_bytes = size*sizeof(uint);
+    rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|kmer_hash|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    std::vector<uint> part_hashes;
+    part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
+    delete value;
 
-    s = db->Get(read_options, params3.group_name + std::string("|kmer_hash|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_hashes.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_hashes = KMerge::uncompress(comp_hashes, uncompressed_size);
-    comp_hashes.clear();
-    std::vector<uint>().swap(comp_hashes);
-    
-    s = db->Get(read_options, params3.group_name + std::string("|count|") + std::to_string(i), &value);
-    REQUIRE(s.ok() == true);
-    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + value.size()/sizeof(uint));
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, uncompressed_size);
+    n_bytes = sizeof(uint);
+    uint compressed_size;
+    rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|count|") + std::to_string(i) + std::string("|size")).c_str(),-1, &compressed_size, &n_bytes);
+    REQUIRE(rc == UNQLITE_OK);
+    value = new uint[compressed_size];
+    n_bytes = sizeof(uint)*compressed_size;
+    rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
+    comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
+    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
+    delete value;
+
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
@@ -1032,7 +1052,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   }
 
 
-  for (pos = 0; pos < total_uncompressed_size; pos++) {
+  for (pos = 0; pos < 512 /*3^5*/; pos++) {
     if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
       kmer1_pos = pos;
     }
@@ -1051,10 +1071,19 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
 
-  s = db->Get(read_options, params3.group_name + std::string("|taxonomy"), &value);
-  REQUIRE(s.ok() == true);
-  ss_in << value;
+  n_bytes = sizeof(uint);
+  rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+
+  ss_in.str("");
+  n_bytes = size;
+  tax_value = new char[size];
+  rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|taxonomy")).c_str(),-1, tax_value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+  ss_in << tax_value;
   dlib::deserialize(taxonomy, ss_in);
+  delete tax_value;
+
 
 
   in_file.open("/home/darryl/Development/kmerge/tests/54095/taxonomy.txt");
@@ -1080,13 +1109,10 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
   in_file.close();
 
-  delete db;
+  unqlite_close(db);
 
-  ss_delete << "rm " << params1.db_filename << "/*";
-  system(ss_delete.str().c_str());
-  ss_delete.str("");
-  ss_delete << "rm -r " << params1.db_filename;
-  system(ss_delete.str().c_str());
+  if( remove( params1.db_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
 
 }
 
@@ -1144,18 +1170,15 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
 TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   std::string db_filename("taxonomy.db"), group("54095"); 
-  std::string line, value;
-  std::stringstream ss_in, ss_delete;
+  std::string line;
+  char* value;
+  std::stringstream ss_in;
   std::map<std::string, std::string> taxonomy;
-  leveldb::ReadOptions read_options;
-  read_options.verify_checksums = true;
 
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.create_if_missing = true;
+  unqlite *db;
 
-  leveldb::Status s = leveldb::DB::Open(options, db_filename, &db);
-  REQUIRE(s.ok() == true);
+  int rc = unqlite_open(&db, db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  REQUIRE(rc == UNQLITE_OK);
 
   
   KMerge *kmerge = new KMerge(db_filename, "lookup3", ".");
@@ -1164,11 +1187,18 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
 
   delete kmerge;
 
-   
-  s = db->Get(read_options, group + std::string("|taxonomy"), &value);
-  REQUIRE(s.ok() == true);
+  unqlite_int64 n_bytes = sizeof(uint);
+  uint size;
+  rc = unqlite_kv_fetch(db,(group + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
+
+  n_bytes = size;
+  value = new char[size];
+  rc = unqlite_kv_fetch(db,(group + std::string("|taxonomy")).c_str(),-1, value, &n_bytes);
+  REQUIRE(rc == UNQLITE_OK);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
+  delete value;
 
 
   ifstream in_file("/home/darryl/Development/kmerge/tests/54095/taxonomy.txt");
@@ -1192,14 +1222,10 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   taxonomy.clear();
   std::map<std::string, std::string>().swap(taxonomy);
 
-  delete db;
+  unqlite_close(db);
 
-  
-  ss_delete << "rm " << db_filename << "/*";
-  system(ss_delete.str().c_str());
-  ss_delete.str("");
-  ss_delete << "rm -r " << db_filename;
-  system(ss_delete.str().c_str());
+  if( remove( db_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
 
 
 }

@@ -9,12 +9,11 @@
 #include <zlib.h>
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
-#include "leveldb/db.h"
+#include "unqlite.h"
 
 KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
-#define PARTITION_SIZE 1000000000
 
 using namespace std;
 
@@ -35,7 +34,7 @@ struct param_struct {
   uint num_threads;
   uint priority;
   std::string lock_filename;
-  leveldb::DB* db;
+  unqlite* db;
 } ;
 
 
@@ -50,6 +49,7 @@ class KMerge {
  public:
   static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
   static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
+  static const uint PARTITION_SIZE = 500000000;
 
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
@@ -58,10 +58,10 @@ class KMerge {
   static std::vector<uint> uncompress(const std::vector<uint>&, uint);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
-  bool add_property(uint, const std::string&, leveldb::DB*);
-  bool add_dataset(const std::vector<uint>&, const std::string&, leveldb::DB*);
+  bool add_property(uint, const std::string&, unqlite*);
+  bool add_dataset(const std::vector<uint>&, const std::string&, unqlite*, bool);
   bool add_dataset(const uint, const uint*, param_struct&);
-  bool add_taxonomy(const std::string&, leveldb::DB*);
+  bool add_taxonomy(const std::string&, unqlite*);
   static uint hash_kmer(const std::string&, const HashEnumType);
   uint hash_kmer(const std::string&);
   bool add_hash_and_count(std::vector<uint>&, std::vector<uint>&, uint, uint);

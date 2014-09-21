@@ -139,36 +139,30 @@ std::vector<uint> KMerge::compress(const std::vector<uint>& data) {
   return compressed;
 }
 
-std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed_output, uint uncompressed_length) {
+std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed, uint uncompressed_length) {
   FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
   std::vector<uint32_t> data(uncompressed_length);
   size_t recoveredsize = data.size();
-  codec.decodeArray(compressed_output.data(),
-                    compressed_output.size(), data.data(), recoveredsize);
+  codec.decodeArray(compressed.data(),
+                    compressed.size(), data.data(), recoveredsize);
   data.resize(recoveredsize);
-
   return data;
 
 }
 
 
 
-bool KMerge::add_property(uint size, const std::string& key, leveldb::DB* db) {
-  std::stringstream ss_out;
-  leveldb::WriteOptions write_options;
-  write_options.sync = true;
+bool KMerge::add_property(uint size, const std::string& key, unqlite *db) {
 
+  this->dlog << dlib::LINFO << "Adding property " << key;
 
-  this->dlog << dlib::LINFO << "Adding property for " << key;
-  ss_out << size;
-
-  leveldb::Status s = db->Put(write_options, key, ss_out.str());
-  if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to add property for " << key << ": " << s.ToString();
+  int rc = unqlite_kv_store(db,key.c_str(),-1,&size,sizeof(uint));
+  if (rc != UNQLITE_OK) {
+    this->dlog << dlib::LERROR << "Unable to add property " << key << "- Error code: " << rc;
     return false;
   }
 
-  this->dlog <<dlib::LINFO << "Finished adding property for " << key;
+  this->dlog <<dlib::LINFO << "Finished adding property " << key;
 
   return true;
 
@@ -176,26 +170,24 @@ bool KMerge::add_property(uint size, const std::string& key, leveldb::DB* db) {
  
 
 
-
-bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, leveldb::DB* db){
-  std::stringstream ss_out;
-  leveldb::WriteOptions write_options;
-  write_options.sync = true;
-
+bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, unqlite* db, bool compress){
+  int rc;
 
   this->dlog << dlib::LINFO << "Adding data for " << key;
 
-  this->dlog << dlib::LINFO << "Compressing data for " << key;
-
-  std::vector<uint> compressed = KMerge::compress(data);
-
-  this->dlog << dlib::LINFO << "Finished compressing data for " << key;
-
-  leveldb::Slice sl = leveldb::Slice((char*) &compressed[0], sizeof(uint)*compressed.size());
-
-  leveldb::Status s = db->Put(write_options, key, sl);
-  if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to write data for " << key << ": " << s.ToString();
+  if (compress == true) {
+    this->dlog << dlib::LINFO << "Compressing data for " << key;
+    std::vector<uint> compressed = KMerge::compress(data);
+    this->dlog << dlib::LINFO << data.size() << "-->" << compressed.size();
+    this->dlog << dlib::LINFO << "Finished compressing data for " << key;
+    rc = unqlite_kv_store(db,key.c_str(),-1,&compressed[0],sizeof(uint)*compressed.size());
+    this->add_property(compressed.size(), (key + "|size").c_str(), db);
+  } else {
+    rc = unqlite_kv_store(db,key.c_str(),-1,&data[0],sizeof(uint)*data.size());
+    this->add_property(data.size(), (key + "|size").c_str(), db);
+  }
+  if (rc != UNQLITE_OK) {
+    this->dlog << dlib::LERROR << "Unable to write data for " << key << "- Error code: " << rc;
     return false;
   }
 
@@ -207,16 +199,14 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, 
 
 
 
-bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
+bool KMerge::add_taxonomy(const std::string& group_name, unqlite* db) {
   std::map<std::string, std::string> taxonomy;
   std::stringstream ss_out, path_root, in_file_ss;
   std::string line;
-  leveldb::WriteOptions write_options;
-  write_options.sync = true;
 
 
 
-  this->dlog <<dlib::LINFO << "Adding taxonomy for " << group_name;
+  this->dlog << dlib::LINFO << "Adding taxonomy for " << group_name;
 
   path_root << "/" << group_name << "/taxonomy";
 
@@ -244,11 +234,14 @@ bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
   in_file.close();
   dlib::serialize(taxonomy, ss_out);
 
-  leveldb::Status s = db->Put(write_options, group_name + std::string("|taxonomy"), ss_out.str());
-  if (!s.ok()) {
-    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name << ": " << s.ToString();
+  int rc = unqlite_kv_store(db,(group_name + std::string("|taxonomy")).c_str(),-1, ss_out.str().c_str(), ss_out.str().size());
+
+  if (rc != UNQLITE_OK) {
+    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name << "- Error code: " << rc;
     return false;
   }
+  this->add_property(ss_out.str().size(), (group_name + std::string("|taxonomy|size")).c_str(), db);
+
 
   this->dlog <<dlib::LINFO << "Finished adding taxonomy for " << group_name;
 
@@ -256,13 +249,9 @@ bool KMerge::add_taxonomy(const std::string& group_name, leveldb::DB* db) {
 }
 
 
-
 void KMerge::build(param_struct& params) {
   stringstream file_name, file_loc;
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
-  leveldb::Options options;
-  options.create_if_missing = true;
-  options.paranoid_checks = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, false))) {
@@ -272,7 +261,9 @@ void KMerge::build(param_struct& params) {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
-  params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hashed_counts.size();
+  uint nz_count = hashed_counts.size();
+
+  params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count;
 
   params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
 
@@ -301,40 +292,44 @@ void KMerge::build(param_struct& params) {
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
 
-  
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
-  if (!s.ok()) {
-    params.kmerge->dlog << dlib::LERROR << s.ToString();
+
+  int rc = unqlite_open(&(params.db), params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  if (rc != UNQLITE_OK) {
+    params.kmerge->dlog << dlib::LERROR << params.group_name << " - Error code: " << rc;
     return;
   }
 
-  uint partitions = ceil((double) hashes.size()/PARTITION_SIZE);
+  uint partitions = ceil((double) hashes.size()/KMerge::PARTITION_SIZE);
 
   if(!params.kmerge->add_property(partitions, params.group_name + std::string("|parts"), params.db)) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
-    delete params.db;
+    unqlite_close(params.db);
     return;
   }
 
   for (uint i = 0; i < partitions; i++) {
-    if(!params.kmerge->add_property(hashes.size(), params.group_name + std::string("|size|") + std::to_string(i), params.db)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
-      delete params.db;
-      return;
-    }
-    if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db)) {
+    uint start_offset = i*KMerge::PARTITION_SIZE;
+    uint end_offset = (i+1)*KMerge::PARTITION_SIZE;
+    if (nz_count - i*KMerge::PARTITION_SIZE < KMerge::PARTITION_SIZE) end_offset = nz_count;
+    std::vector<uint> sub_hashes(hashes.begin() + start_offset, hashes.begin() + end_offset);
+    std::vector<uint> sub_counts(counts.begin() + start_offset, counts.begin() + end_offset);
+    if(!params.kmerge->add_dataset(sub_hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db, false)) {
       params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
-      delete params.db;
+      unqlite_close(params.db);
       return;
     }
+    sub_hashes.clear();
+    std::vector<uint>().swap(sub_hashes);
 
-    if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count|") + std::to_string(i), params.db)) {
+    if(!params.kmerge->add_dataset(sub_counts, params.group_name + std::string("|count|") + std::to_string(i), params.db, true)) {
       params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
-      delete params.db;
+      unqlite_close(params.db);
       return;
     }
+    sub_counts.clear();
+    std::vector<uint>().swap(sub_counts);
   }
-  delete params.db;
+  unqlite_close(params.db);
 
   params.kmerge->dlog << dlib::LINFO << hashes.size() << " k-mer hashes for " << params.group_name;
 
@@ -348,14 +343,11 @@ void KMerge::build(param_struct& params) {
 }
 
 
-
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
+  uint nz_count;
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
   std::vector<uint> hashes, counts;
-  leveldb::Options options;
-  options.create_if_missing = true;
-  options.paranoid_checks = true;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
@@ -365,7 +357,9 @@ void KMerge::BuilderTask::execute() {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
-  params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << hashed_counts.size() << " for " << params.group_name;
+  nz_count = hashed_counts.size();
+
+  params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count << " for " << params.group_name;
 
 
   params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
@@ -393,49 +387,61 @@ void KMerge::BuilderTask::execute() {
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
 
-  leveldb::Status s = leveldb::DB::Open(options, params.db_filename, &(params.db));
-  while (!s.ok()) {
-    sleep(params.priority);
-    s = leveldb::DB::Open(options, params.db_filename, &(params.db));
-  }
-  
-  params.kmerge->dlog <<dlib::LINFO << params.group_name << " obtained db lock";
-
-  uint partitions = ceil((double) hashes.size()/PARTITION_SIZE);
-
-  if(!params.kmerge->add_property(partitions, params.group_name + std::string("|parts"), params.db)) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
-    delete params.db;
+  int rc = unqlite_open(&(params.db), params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
+  if (rc != UNQLITE_OK) {
+    params.kmerge->dlog << dlib::LERROR << params.group_name << " - Error code: " << rc;
     return;
   }
 
-  for (uint i = 0; i < partitions; i++) {
-    if(!params.kmerge->add_property(hashes.size(), params.group_name + std::string("|size|") + std::to_string(i), params.db)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
-      delete params.db;
-      return;
-    }
-    if(!params.kmerge->add_dataset(hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
-      delete params.db;
-      return;
-    }
 
-    if(!params.kmerge->add_dataset(counts, params.group_name + std::string("|count|") + std::to_string(i), params.db)) {
-      params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
-      delete params.db;
+  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
+
+  
+  params.kmerge->dlog <<dlib::LINFO << params.group_name << " obtained db lock";
+
+  uint partitions = ceil((double) hashes.size()/KMerge::PARTITION_SIZE);
+
+  if(!params.kmerge->add_property(partitions, params.group_name + std::string("|parts"), params.db)) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to add dataset size for " << params.group_name;
+    unqlite_close(params.db);
+    return;
+  }
+
+
+  for (uint i = 0; i < partitions; i++) {
+    uint start_offset = i*KMerge::PARTITION_SIZE;
+    uint end_offset = (i+1)*KMerge::PARTITION_SIZE;
+    if (nz_count - i*KMerge::PARTITION_SIZE < KMerge::PARTITION_SIZE) end_offset = nz_count;
+    std::vector<uint> sub_hashes(hashes.begin() + start_offset, hashes.begin() + end_offset);
+    std::vector<uint> sub_counts(counts.begin() + start_offset, counts.begin() + end_offset);
+    if(!params.kmerge->add_dataset(sub_hashes, params.group_name + std::string("|kmer_hash|") + std::to_string(i), params.db, false)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+      unqlite_close(params.db);
       return;
     }
+    sub_hashes.clear();
+    std::vector<uint>().swap(sub_hashes);
+
+    if(!params.kmerge->add_dataset(sub_counts, params.group_name + std::string("|count|") + std::to_string(i), params.db, true)) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+      unqlite_close(params.db);
+      return;
+    }
+    sub_counts.clear();
+    std::vector<uint>().swap(sub_counts);
+
   }
 
   if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
-    delete params.db;
+    unqlite_close(params.db);
     return;
   }
 
 
-  delete params.db;
+  unqlite_close(params.db);
+
+  rmdir(params.lock_filename.c_str());
 
   params.kmerge->dlog <<dlib::LINFO << params.group_name << " relinquished db lock";
 

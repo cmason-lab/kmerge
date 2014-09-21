@@ -4,11 +4,11 @@ DEVELOPMENT_INCLUDE_DIR=$(HOME_DIR)/Development/include
 DEVELOPMENT_LIB_DIR = $(HOME_DIR)/Development/lib
 #CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11
 CXX=g++ -std=c++11 -mssse3
-CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT
+CXXFLAGS+=-W -Wall -Wno-long-long -pedantic -Wno-variadic-macros -pthread -DDLIB_NO_GUI_SUPPORT -DUNQLITE_ENABLE_THREADS
 
 CPPFLAGS += -I $(HOME_DIR)/include -I $(DEVELOPMENT_INCLUDE_DIR)
 
-LDFLAGS+=-lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(DEVELOPMENT_LIB_DIR) -lleveldb -lFastPFor_lib
+LDFLAGS+=-lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(DEVELOPMENT_LIB_DIR) -lFastPFor_lib -lunqlite
 
 
 default: all

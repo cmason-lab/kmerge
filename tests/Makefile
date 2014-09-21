@@ -24,7 +24,7 @@ CXX=g++ -std=c++11 -mssse3
 
 # libraries to include
 
-LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lulib -lleveldb -lpthread -lFastPFor_lib -llmdb
+LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lulib -lpthread -lFastPFor_lib -lunqlite
 
 # House-keeping build targets.
 
@@ -47,3 +47,4 @@ murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DI
 
 kmerge_unittest.o : $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(TEST_INCLUDE_DIR)/kmerge_unittest.cc -o $@ $(LDFLAGS)
+
