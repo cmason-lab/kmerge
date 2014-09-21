@@ -158,7 +158,7 @@ bool KMerge::add_property(uint size, const std::string& key, unqlite *db) {
 
   int rc = unqlite_kv_store(db,key.c_str(),-1,&size,sizeof(uint));
   if (rc != UNQLITE_OK) {
-    this->dlog << dlib::LERROR << "Unable to add property " << key << "- Error code: " << rc;
+    this->dlog << dlib::LERROR << "Unable to add property " << key << " - Error code: " << rc;
     return false;
   }
 
@@ -187,7 +187,7 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, 
     this->add_property(data.size(), (key + "|size").c_str(), db);
   }
   if (rc != UNQLITE_OK) {
-    this->dlog << dlib::LERROR << "Unable to write data for " << key << "- Error code: " << rc;
+    this->dlog << dlib::LERROR << "Unable to write data for " << key << " - Error code: " << rc;
     return false;
   }
 
@@ -237,7 +237,7 @@ bool KMerge::add_taxonomy(const std::string& group_name, unqlite* db) {
   int rc = unqlite_kv_store(db,(group_name + std::string("|taxonomy")).c_str(),-1, ss_out.str().c_str(), ss_out.str().size());
 
   if (rc != UNQLITE_OK) {
-    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name << "- Error code: " << rc;
+    this->dlog << dlib::LERROR << "Unable to write taxonomy data for " << group_name << " - Error code: " << rc;
     return false;
   }
   this->add_property(ss_out.str().size(), (group_name + std::string("|taxonomy|size")).c_str(), db);
@@ -381,23 +381,24 @@ void KMerge::BuilderTask::execute() {
     counts.push_back(b_iter->second);
   }
 
-  params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
+  params.kmerge->dlog << dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
   
   // remove all elements from map as they are no longer needed
   sorted_hashed_counts.clear();
   btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
+
+
+
+  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
+
+  
+  params.kmerge->dlog << dlib::LINFO << params.group_name << " obtained db lock";
 
   int rc = unqlite_open(&(params.db), params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
   if (rc != UNQLITE_OK) {
     params.kmerge->dlog << dlib::LERROR << params.group_name << " - Error code: " << rc;
     return;
   }
-
-
-  while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
-
-  
-  params.kmerge->dlog <<dlib::LINFO << params.group_name << " obtained db lock";
 
   uint partitions = ceil((double) hashes.size()/KMerge::PARTITION_SIZE);
 
@@ -487,6 +488,7 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
       counter++;
     }
   }
+  gzclose(fp);
   params.kmerge->dlog << dlib::LINFO << "Parsed " << counter << " hashes from sequence(s) in " << params.group_name << " (k = " << k << ")";
 }
 

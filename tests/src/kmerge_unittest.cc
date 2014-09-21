@@ -599,7 +599,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(rc == UNQLITE_OK);
   std::vector<uint> hashes_in;
   hashes_in.assign((uint*) &value[0], (uint*) &value[0] + size);
-  delete value;
+  delete [] value;
  
   n_bytes = sizeof(uint);
   uint compressed_size;
@@ -612,7 +612,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint> counts_in = KMerge::uncompress(comp_counts, size);
   comp_counts.clear();
   std::vector<uint>().swap(comp_counts);
-  delete value;
+  delete [] value;
 
   unqlite_close(params.db);
 
@@ -677,7 +677,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
     REQUIRE(rc == UNQLITE_OK);
     std::vector<uint> part_hashes;
     part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
-    delete value;
+    delete [] value;
 
     n_bytes = sizeof(uint);
     uint compressed_size;
@@ -690,7 +690,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
     std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
-    delete value;
+    delete [] value;
 
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
@@ -810,7 +810,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     REQUIRE(rc == UNQLITE_OK);
     std::vector<uint> part_hashes;
     part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
-    delete value;
+    delete [] value;
 
     n_bytes = sizeof(uint);
     uint compressed_size;
@@ -823,7 +823,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
-    delete value;
+    delete [] value;
 
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
@@ -872,7 +872,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(rc == UNQLITE_OK);
   ss_in << tax_value;
   dlib::deserialize(taxonomy, ss_in);
-  delete tax_value;
+  delete [] tax_value;
 
   in_file.open("/home/darryl/Development/kmerge/tests/208831/taxonomy.txt");
 
@@ -916,7 +916,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     REQUIRE(rc == UNQLITE_OK);
     std::vector<uint> part_hashes;
     part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
-    delete value;
+    delete [] value;
 
     n_bytes = sizeof(uint);
     uint compressed_size;
@@ -929,7 +929,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
-    delete value;
+    delete [] value;
 
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
@@ -977,7 +977,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(rc == UNQLITE_OK);
   ss_in << tax_value;
   dlib::deserialize(taxonomy, ss_in);
-  delete tax_value;
+  delete [] tax_value;
 
 
   in_file.open("/home/darryl/Development/kmerge/tests/209328/taxonomy.txt");
@@ -1022,7 +1022,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     REQUIRE(rc == UNQLITE_OK);
     std::vector<uint> part_hashes;
     part_hashes.assign((uint*) &value[0], (uint*) &value[0] + size);
-    delete value;
+    delete [] value;
 
     n_bytes = sizeof(uint);
     uint compressed_size;
@@ -1035,7 +1035,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
     std::vector<uint>().swap(comp_counts);
-    delete value;
+    delete [] value;
 
     
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
@@ -1082,7 +1082,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   REQUIRE(rc == UNQLITE_OK);
   ss_in << tax_value;
   dlib::deserialize(taxonomy, ss_in);
-  delete tax_value;
+  delete [] tax_value;
 
 
 
@@ -1198,7 +1198,7 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   REQUIRE(rc == UNQLITE_OK);
   ss_in << value;
   dlib::deserialize(taxonomy, ss_in);
-  delete value;
+  delete [] value;
 
 
   ifstream in_file("/home/darryl/Development/kmerge/tests/54095/taxonomy.txt");
