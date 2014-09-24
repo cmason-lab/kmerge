@@ -267,30 +267,27 @@ void KMerge::build(param_struct& params) {
 
   params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
 
-  btree::btree_map<uint, uint> sorted_hashed_counts;
-  for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    sorted_hashed_counts[iter.key()] = iter.value();
-  }
-
-  params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
-
-  // remove all elements from map as they are no longer needed
-  hashed_counts.clear();
-
-  params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
 
   std::vector<uint> hashes, counts;
 
-  for (btree::btree_map<uint, uint>::iterator b_iter = sorted_hashed_counts.begin(); b_iter != sorted_hashed_counts.end(); ++b_iter) {
-    hashes.push_back(b_iter->first);
-    counts.push_back(b_iter->second);
+  for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
+    hashes.push_back(iter.key());
+  }
+  std::sort(hashes.begin(), hashes.end());
+
+  params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
+
+  params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
+
+
+  for (std::vector<uint>::const_iterator h_iter = hashes.begin(); h_iter != hashes.end(); ++h_iter) {
+    counts.push_back(hashed_counts[*h_iter]);
   }
 
   params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
   
   // remove all elements from map as they are no longer needed
-  sorted_hashed_counts.clear();
-  btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
+  hashed_counts.clear();
 
 
   int rc = unqlite_open(&(params.db), params.db_filename.c_str(), UNQLITE_OPEN_CREATE);
@@ -347,7 +344,6 @@ void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
   uint nz_count;
   ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
-  std::vector<uint> hashes, counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
   if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
@@ -361,33 +357,28 @@ void KMerge::BuilderTask::execute() {
 
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count << " for " << params.group_name;
 
+  std::vector<uint> hashes, counts;
 
   params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
-  // put hashes in sorted order via btree_map
-  btree::btree_map<uint, uint> sorted_hashed_counts;
+ 
   for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    sorted_hashed_counts[iter.key()] = iter.value();
+    hashes.push_back(iter.key());
   }
+  std::sort(hashes.begin(), hashes.end());
 
   params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
 
-  // remove all elements from map as they are no longer needed
-  hashed_counts.clear();
-
   params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
 
-  for (btree::btree_map<uint, uint>::iterator b_iter = sorted_hashed_counts.begin(); b_iter != sorted_hashed_counts.end(); ++b_iter) {
-    hashes.push_back(b_iter->first);
-    counts.push_back(b_iter->second);
+
+  for (std::vector<uint>::const_iterator h_iter = hashes.begin(); h_iter != hashes.end(); ++h_iter) {
+    counts.push_back(hashed_counts[*h_iter]);
   }
 
-  params.kmerge->dlog << dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
-  
+  params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
+
   // remove all elements from map as they are no longer needed
-  sorted_hashed_counts.clear();
-  btree::btree_map<uint, uint>().swap(sorted_hashed_counts);
-
-
+  hashed_counts.clear();
 
   while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
 
