@@ -128,9 +128,9 @@ bool KMerge::count_hashed_kmers(param_struct& params,  ulib::chain_hash_map<uint
   return true;
 }
 
-std::vector<uint> KMerge::compress(const std::vector<uint>& data) {
+std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > KMerge::compress(const std::vector<uint>& data) {
   FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
-  std::vector<uint32_t> compressed(data.size()*1.1);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed(data.size()*1.1);
   size_t compressedsize = compressed.size();
   codec.encodeArray(data.data(), data.size(),
                     compressed.data(), compressedsize);
@@ -139,9 +139,9 @@ std::vector<uint> KMerge::compress(const std::vector<uint>& data) {
   return compressed;
 }
 
-std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed, uint uncompressed_length) {
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > KMerge::uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >& compressed, uint uncompressed_length) {
   FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
-  std::vector<uint32_t> data(uncompressed_length);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > data(uncompressed_length);
   size_t recoveredsize = data.size();
   codec.decodeArray(compressed.data(),
                     compressed.size(), data.data(), recoveredsize);
@@ -177,7 +177,7 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, 
 
   if (compress == true) {
     this->dlog << dlib::LINFO << "Compressing data for " << key;
-    std::vector<uint> compressed = KMerge::compress(data);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed = KMerge::compress(data);
     this->dlog << dlib::LINFO << data.size() << "-->" << compressed.size();
     this->dlog << dlib::LINFO << "Finished compressing data for " << key;
     rc = unqlite_kv_store(db,key.c_str(),-1,&compressed[0],sizeof(uint)*compressed.size());

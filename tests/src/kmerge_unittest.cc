@@ -15,17 +15,17 @@
 
 TEST_CASE("CompressHashesTest", "CompressionTest") {
   size_t N = 10 * 1000;
-  std::vector<uint32_t> mydata(N);
+  std::vector<uint> mydata(N);
   for(uint32_t i = 0; i < N;i += 150) mydata[i] = i;
 
-  std::vector<uint32_t> compressed_output = KMerge::compress(mydata);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed_output = KMerge::compress(mydata);
 
   std::cout<<std::setprecision(3);
   std::cout<<"You are using " << 32.0 * static_cast<double>(compressed_output.size()) /
     static_cast<double>(mydata.size()) <<" bits per integer. "<<std::endl;
   
 
-  std::vector<uint32_t> mydataback = KMerge::uncompress(compressed_output, N);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > mydataback = KMerge::uncompress(compressed_output, N);
 
   for (uint i = 0; i <= mydata.size(); i++) {
     REQUIRE(mydata[i] == mydataback[i]);
@@ -58,7 +58,6 @@ TEST_CASE("UnQLiteBasicsTest", "HashStorageTest") {
 
 }
 
-
 TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
   std::string key1("test");
   std::stringstream ss_in, ss_out;
@@ -73,7 +72,7 @@ TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
   size_t step = 1500;
   //std::vector<uint> test;
   //REQUIRE(test.max_size() > N);
-  std::vector<uint32_t> mydata(N);
+  std::vector<uint> mydata(N);
   for(uint32_t i = 0; i < N;i += step) mydata[i] = i;
 
   std::cout << "Finished generating original data" << std::endl;
@@ -83,7 +82,7 @@ TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
   REQUIRE(rc == UNQLITE_OK);
 
   std::cout << "Compressing data" << std::endl;
-  std::vector<uint32_t> compressed = KMerge::compress(mydata);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed = KMerge::compress(mydata);
   std::cout << "Finished compressing data" << std::endl;    
 
   std::cout << "Writing data" << std::endl;
@@ -92,7 +91,7 @@ TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
   REQUIRE(rc == UNQLITE_OK);
   std::cout << "Finished writing data" << std::endl; 
   compressed.clear();
-  std::vector<uint>().swap(compressed);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(compressed);
 
   std::cout << "Reading data" << std::endl;
   n_bytes = sizeof(uint)*comp_size;
@@ -107,7 +106,7 @@ TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
   std::cout << "Finished copying data" << std::endl;
   delete [] value;
   std::cout << "Uncompressing data" << std::endl;
-  std::vector<uint32_t> mydataback = KMerge::uncompress(compressed, N);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > mydataback = KMerge::uncompress(compressed, N);
   std::cout << "Finished uncompressing data" << std::endl;
 
   std::cout << "Checking data" << std::endl;
@@ -125,6 +124,7 @@ TEST_CASE("UnQLiteAndFastPForTest", "HashStorageTest") {
 
 }
 
+
 TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
   std::string key1("test");
   std::stringstream ss_in, ss_out;
@@ -138,7 +138,7 @@ TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
   std::cout << "Generating original data" << std::endl;
 
   size_t N = 1352554547; // hash count causing failure in live runs
-  std::vector<uint32_t> mydata(N);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > mydata(N);
   for(uint32_t i = 0; i < N; i++) mydata[i] = i;
   uint part_size = 500000000;
   std::cout << "Finished generating original data" << std::endl;
@@ -152,7 +152,7 @@ TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
     if (N - i*part_size < part_size) end_offset = N;
     std::vector<uint> sub(mydata.begin() + start_offset, mydata.begin() + end_offset);
     std::cout << "Compressing data" << std::endl;
-    std::vector<uint32_t> compressed = KMerge::compress(sub);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed = KMerge::compress(sub);
     std::cout << "Finished compressing data" << std::endl;
     comp_size.push_back(compressed.size());
 
@@ -162,7 +162,7 @@ TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
     std::cout << "Finished writing data" << std::endl;
     sub.clear();
   }
-  std::vector<uint32_t> mydataback;
+  std::vector<uint> mydataback;
   for (uint i=0; i < ceil((double) N/part_size);i++) {
     std::cout << "Reading data for " << i << std::endl;
     n_bytes = comp_size[i]*sizeof(uint);
@@ -172,12 +172,12 @@ TEST_CASE("UnQLiteAndFastPForWithLargeDenseHashCountTest", "HashStorageTest") {
     std::cout << "Finished reading data" << std::endl;
    
     std::cout << "Copying data" << std::endl;
-    std::vector<uint> compressed((uint*) &value[0], (uint*) &value[0] + n_bytes/sizeof(uint));
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed((uint*) &value[0], (uint*) &value[0] + n_bytes/sizeof(uint));
     std::cout << "Finished copying data" << std::endl;
 
     delete [] value;
     std::cout << "Uncompressing data" << std::endl;
-    std::vector<uint32_t> sub = KMerge::uncompress(compressed, N);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > sub = KMerge::uncompress(compressed, N);
     std::cout << "Finished uncompressing data" << std::endl;
     std::cout << "Appending data for " << i << std::endl;
     mydataback.insert(mydataback.end(), sub.begin(), sub.end());
@@ -520,8 +520,8 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
 }
 
 TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
-  std::vector<uint> hashes_out;
-  std::vector<uint> counts_out, comp_counts;
+  std::vector<uint> hashes_out, counts_out;
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >comp_counts;
   ulib::chain_hash_map<uint, uint> hashed_counts(1000000);
   const string kmer1("AAAAA");
   const string kmer2("TTTTT");
@@ -609,9 +609,9 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   n_bytes = sizeof(uint)*compressed_size;
   rc = unqlite_kv_fetch(params.db,(params.group_name + std::string("|count")).c_str(),-1,value, &n_bytes);
   comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
-  std::vector<uint> counts_in = KMerge::uncompress(comp_counts, size);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > counts_in = KMerge::uncompress(comp_counts, size);
   comp_counts.clear();
-  std::vector<uint>().swap(comp_counts);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE>>().swap(comp_counts);
   delete [] value;
 
   unqlite_close(params.db);
@@ -631,7 +631,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   param_struct params;
   std::string value;
   std::stringstream ss_delete;
-  std::vector<uint> comp_hashes, comp_counts;
+  std::vector<uint> comp_hashes;
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > comp_counts;
 
 
   params.k_val_start = 3;
@@ -661,7 +662,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   rc = unqlite_kv_fetch(db, (params.group_name + std::string("|parts")).c_str(), -1, &num_parts, &n_bytes);
   REQUIRE(rc == UNQLITE_OK);
 
-  std::vector<uint> hashes_in, counts_in;
+  std::vector<uint> hashes_in;
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > counts_in;
 
   for (uint i=0; i < num_parts; i++) {
     n_bytes = sizeof(uint);
@@ -687,9 +689,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
     n_bytes = sizeof(uint)*compressed_size;
     rc = unqlite_kv_fetch(db,(params.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
     comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
-    std::vector<uint>().swap(comp_counts);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(comp_counts);
     delete [] value;
 
     
@@ -717,7 +719,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
 
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
-  std::vector<uint> hashes_in, counts_in, comp_hashes, comp_counts;
+  std::vector<uint> hashes_in, comp_hashes;
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > counts_in, comp_counts;
   uint kmer1_count, kmer2_count, kmer1_pos, kmer2_pos, pos, total_uncompressed_size;
   param_struct params1, params2, params3;
   std::map<std::string, std::string> taxonomy;
@@ -820,9 +823,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     n_bytes = sizeof(uint)*compressed_size;
     rc = unqlite_kv_fetch(db,(params1.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
     comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
-    std::vector<uint>().swap(comp_counts);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(comp_counts);
     delete [] value;
 
     
@@ -858,7 +861,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();
-  std::vector<uint>().swap(counts_in);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(counts_in);
  
   n_bytes = sizeof(uint);
   uint size;
@@ -926,9 +929,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     n_bytes = sizeof(uint)*compressed_size;
     rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
     comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
-    std::vector<uint>().swap(comp_counts);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(comp_counts);
     delete [] value;
 
     
@@ -964,7 +967,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();
-  std::vector<uint>().swap(counts_in);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(counts_in);
 
   n_bytes = sizeof(uint);
   rc = unqlite_kv_fetch(db,(params2.group_name + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);
@@ -1032,9 +1035,9 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     n_bytes = sizeof(uint)*compressed_size;
     rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|count|") + std::to_string(i)).c_str(),-1,value, &n_bytes);
     comp_counts.assign((uint*) &value[0], (uint*) &value[0] + compressed_size);
-    std::vector<uint> part_counts = KMerge::uncompress(comp_counts, size);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > part_counts = KMerge::uncompress(comp_counts, size);
     comp_counts.clear();
-    std::vector<uint>().swap(comp_counts);
+    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(comp_counts);
     delete [] value;
 
     
@@ -1069,7 +1072,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   hashes_in.clear();
   std::vector<uint>().swap(hashes_in);
   counts_in.clear();
-  std::vector<uint>().swap(counts_in);
+  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >().swap(counts_in);
 
   n_bytes = sizeof(uint);
   rc = unqlite_kv_fetch(db,(params3.group_name + std::string("|taxonomy") + std::string("|size")).c_str(),-1, &size, &n_bytes);

@@ -10,12 +10,16 @@
 #include "cpp-btree/btree_map.h"
 #include <ulib/hash_chain.h>
 #include "unqlite.h"
+#include "fastpfor/memutil.h"
+
 
 KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
+#define BYTE_ALIGNED_SIZE 16
 
 using namespace std;
+
 
 enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY };
 
@@ -54,8 +58,8 @@ class KMerge {
   KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&);
-  static std::vector<uint> compress(const std::vector<uint>&);
-  static std::vector<uint> uncompress(const std::vector<uint>&, uint);
+  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);
+  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
   bool add_property(uint, const std::string&, unqlite*);
