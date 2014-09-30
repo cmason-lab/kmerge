@@ -11,11 +11,14 @@
 #include <ulib/hash_chain.h>
 #include "unqlite.h"
 #include "fastpfor/memutil.h"
+#include <mutex>     
+#include <condition_variable>
 
 
 KSEQ_INIT(gzFile, gzread)
 
 #define MAX_UINT_VAL 4294967295 //2^32-1
+#define BYTES_IN_GB 1073741824.0
 #define BYTE_ALIGNED_SIZE 16
 
 using namespace std;
@@ -38,7 +41,12 @@ struct param_struct {
   uint num_threads;
   uint priority;
   std::string lock_filename;
+  std::mutex* dump_mtx;
+  std::condition_variable* cv;
+  bool ready;
+  bool finished_hashing;
   unqlite* db;
+  ulib::chain_hash_map<uint, uint>* hashed_counts;
 } ;
 
 
@@ -49,6 +57,7 @@ class KMerge {
   dlib::logger dlog;
   std::string filename;
   static pthread_mutex_t db_mutex;
+  double max_gb;
 
  public:
   static const uint CHUNK_ROW_SIZE = 2097152; // calculated this based off of pytables optimization of parameter
@@ -60,6 +69,8 @@ class KMerge {
   static std::string rev_comp(const std::string&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint);
+  static double memory_used(void);
+  static void dump_hashes(ulib::chain_hash_map<uint, uint>&);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
   bool add_property(uint, const std::string&, unqlite*);
@@ -78,6 +89,7 @@ class KMerge {
       param_struct params;
 
       void execute();
+      void check_memory();
     
       BuilderTask(const param_struct params) {
 	this->params = params;
@@ -100,6 +112,7 @@ class KMerge {
 
     ~CountAndHashSeq() {}
     };
+
 
 };
 

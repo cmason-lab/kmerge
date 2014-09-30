@@ -217,6 +217,7 @@ TEST_CASE("ChainedHashMap", "ConcurrentTest") {
 
   REQUIRE(c_map[10] == 0);
 
+  std::cout << "Current memory usage in GB: " << KMerge::memory_used() << std::endl;
 }
 
 
@@ -453,6 +454,8 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   }
 
 }
+
+
 
 
 TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {

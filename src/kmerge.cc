@@ -6,6 +6,7 @@
 #include <fstream>
 #include <unistd.h>
 #include "fastpfor/codecfactory.h"
+#include "getRSS.c"
 
 using namespace std;
 
@@ -82,6 +83,14 @@ uint KMerge::hash_kmer(const std::string& kmer) {
   return KMerge::hash_kmer(kmer, this->hash_type);
 }
 
+double KMerge::memory_used(void) {
+  return getCurrentRSS() / BYTES_IN_GB;
+}
+
+void KMerge::dump_hashes(ulib::chain_hash_map<uint, uint>&) {
+}
+
+
 bool KMerge::add_hash_and_count(std::vector<uint>& hashes, std::vector<uint>& counts, uint kmer_hash_val, uint kmer_count) {
   std::vector<uint>::iterator iter;
   uint pos = 0;        
@@ -120,6 +129,7 @@ bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_has
   }
   return true;
 }
+
 
 bool KMerge::count_hashed_kmers(param_struct& params,  ulib::chain_hash_map<uint, uint>& hashed_counts, bool print_status) {
   KMerge::CountAndHashSeq func(params, hashed_counts, print_status);
@@ -261,6 +271,8 @@ void KMerge::build(param_struct& params) {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
+  params.finished_hashing = true;
+
   uint nz_count = hashed_counts.size();
 
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count;
@@ -339,6 +351,18 @@ void KMerge::build(param_struct& params) {
 
 }
 
+void KMerge::BuilderTask::check_memory() {
+  while (params.finished_hashing == false) {
+    sleep(60);
+    if (KMerge::memory_used() > params.kmerge->max_gb) {
+      std::unique_lock<std::mutex> lck(*(params.dump_mtx));
+      params.ready = false;
+      KMerge::dump_hashes(*(params.hashed_counts));
+      params.ready = true;
+      params.cv->notify_all();
+    }
+  }
+}
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
@@ -352,6 +376,8 @@ void KMerge::BuilderTask::execute() {
   } else {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
+
+  params.finished_hashing = true;
 
   nz_count = hashed_counts.size();
 
@@ -456,6 +482,7 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
   int l;
   kseq_t *seq;
   gzFile fp;
+  std::unique_lock<std::mutex> lck(*(params.dump_mtx));
 
 
   uint k = 2*i - 1; // make sure k is converted to odd value from input index
@@ -475,6 +502,7 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
 	continue;
       }
       hash = params.kmerge->hash_kmer(kmer);
+      while (!params.ready) params.cv->wait(lck);
       hashed_counts[hash]++;
       counter++;
     }
