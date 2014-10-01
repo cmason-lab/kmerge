@@ -20,6 +20,8 @@ KSEQ_INIT(gzFile, gzread)
 #define MAX_UINT_VAL 4294967295 //2^32-1
 #define BYTES_IN_GB 1073741824.0
 #define BYTE_ALIGNED_SIZE 16
+#define MIN_MEM 0 //GB
+#define POLL_INTERVAL 5 //seconds
 
 using namespace std;
 
@@ -33,6 +35,7 @@ class KMerge;
 struct param_struct {
   KMerge * kmerge;
   std::string db_filename;
+  std::string dump_filename;
   uint k_val_start;
   uint k_val_end;
   std::string seq_filename;
@@ -47,6 +50,9 @@ struct param_struct {
   bool finished_hashing;
   unqlite* db;
   ulib::chain_hash_map<uint, uint>* hashed_counts;
+  bool is_ref;
+  std::vector<char> writing;
+  bool polling_done;
 } ;
 
 
@@ -64,13 +70,15 @@ class KMerge {
   static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
   static const uint PARTITION_SIZE = 500000000;
 
-  KMerge(const std::string&, const std::string&, const std::string&);
+  KMerge(const std::string&, const std::string&, const std::string&, double max_gb=MIN_MEM);
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);
-  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint);
+  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint); 
   static double memory_used(void);
-  static void dump_hashes(ulib::chain_hash_map<uint, uint>&);
+  static void dump_hashes(ulib::chain_hash_map<uint, uint>&, std::string&);
+  static void load_hashes(btree::btree_map<uint, uint>&, std::string&);
+  void poll_memory(param_struct&);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
   bool add_property(uint, const std::string&, unqlite*);

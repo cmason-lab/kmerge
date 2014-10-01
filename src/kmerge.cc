@@ -12,10 +12,15 @@ using namespace std;
 
 pthread_mutex_t KMerge::db_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir): dlog("kmerge") {
+KMerge::KMerge (const std::string& filename, const std::string& hash_func, const std::string& dir, double max_gb): dlog("kmerge") {
   this->filename = filename;
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
+  //if (max_gb < MIN_MEM) {
+    this->max_gb = MIN_MEM;
+    /*} else {
+    this->max_gb = max_gb;
+    }*/
 
   if (hash_func == "lookup3") {
     this->hash_type = LOOKUP3;
@@ -87,7 +92,25 @@ double KMerge::memory_used(void) {
   return getCurrentRSS() / BYTES_IN_GB;
 }
 
-void KMerge::dump_hashes(ulib::chain_hash_map<uint, uint>&) {
+void KMerge::dump_hashes(ulib::chain_hash_map<uint, uint>& o_map, std::string& filename) {
+  std::ofstream ofs(filename.c_str(), ios::out | ios::app | ios::binary);
+  for (auto it = o_map.begin(); it != o_map.end(); it++) {
+    ofs << it.key() << "\t" << it.value() << std::endl;
+  }
+  o_map.clear();
+  ofs.close();
+}
+
+void KMerge::load_hashes(btree::btree_map<uint, uint>& i_map, std::string& filename) {
+  std::ifstream ifs(filename.c_str(), ios::in | ios::binary);
+  uint hash, value;
+
+  while (ifs.good()) {
+    ifs >> hash >> value;
+    i_map[hash] += value;
+  }
+
+  ifs.close();
 }
 
 
@@ -258,6 +281,19 @@ bool KMerge::add_taxonomy(const std::string& group_name, unqlite* db) {
   return true;
 }
 
+void KMerge::poll_memory(param_struct& params) {
+  while (params.finished_hashing == false) {
+    if (KMerge::memory_used() > params.kmerge->max_gb) {
+      std::unique_lock<std::mutex> lck(*(params.dump_mtx));
+      params.ready = false;
+      while (!(std::all_of(params.writing.begin(), params.writing.end(), [](char c){return c == 0;}))) sleep(1); // make sure no thread is writing to hashed_counts before proceeding
+      KMerge::dump_hashes(*(params.hashed_counts), params.dump_filename);
+      params.ready = true;
+      params.cv->notify_all();
+    }
+    sleep(POLL_INTERVAL);
+  }
+}
 
 void KMerge::build(param_struct& params) {
   stringstream file_name, file_loc;
@@ -352,59 +388,53 @@ void KMerge::build(param_struct& params) {
 }
 
 void KMerge::BuilderTask::check_memory() {
-  while (params.finished_hashing == false) {
-    sleep(60);
-    if (KMerge::memory_used() > params.kmerge->max_gb) {
-      std::unique_lock<std::mutex> lck(*(params.dump_mtx));
-      params.ready = false;
-      KMerge::dump_hashes(*(params.hashed_counts));
-      params.ready = true;
-      params.cv->notify_all();
-    }
-  }
+  params.kmerge->poll_memory(params);
+  params.polling_done = true; // allow execute to proceed
 }
 
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
   uint nz_count;
-  ulib::chain_hash_map<uint, uint> hashed_counts(KMerge::INIT_MAP_CAPACITY);
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, true))) {
+  if(!(params.kmerge->count_hashed_kmers(params, *(params.hashed_counts), params.is_ref))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
-  params.finished_hashing = true;
+  params.finished_hashing = true; // stop memory polling
+  while (!params.polling_done) sleep(5); 
+  
+  KMerge::dump_hashes(*(params.hashed_counts), params.dump_filename);
 
-  nz_count = hashed_counts.size();
+  btree::btree_map<uint, uint> tmp;
+  
+  params.kmerge->dlog <<dlib::LINFO << "Loading hashes for " << params.group_name;
+  KMerge::load_hashes(tmp, params.dump_filename);
+  params.kmerge->dlog <<dlib::LINFO << "Finished loading hashes for " << params.group_name;
 
+  nz_count = tmp.size();
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count << " for " << params.group_name;
 
-  std::vector<uint> hashes, counts;
-
-  params.kmerge->dlog <<dlib::LINFO << "Sorting hashes for " << params.group_name;
- 
-  for (ulib::chain_hash_map<uint, uint>::iterator iter = hashed_counts.begin(); iter != hashed_counts.end(); ++iter) {
-    hashes.push_back(iter.key());
-  }
-  std::sort(hashes.begin(), hashes.end());
-
-  params.kmerge->dlog <<dlib::LINFO << "Finished sorting hashes for " << params.group_name;
 
   params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
+  std::vector<uint> hashes(nz_count), counts(nz_count);
 
-
-  for (std::vector<uint>::const_iterator h_iter = hashes.begin(); h_iter != hashes.end(); ++h_iter) {
-    counts.push_back(hashed_counts[*h_iter]);
+  uint i = 0;
+  for (btree::btree_map<uint, uint>::const_iterator m_iter = tmp.begin(); m_iter != tmp.end(); m_iter++) {
+    hashes[i] = m_iter->first;
+    counts[i] = m_iter->second;
+    i++;
   }
 
   params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
 
   // remove all elements from map as they are no longer needed
-  hashed_counts.clear();
+  tmp.clear();
+  btree::btree_map<uint,uint>().swap(tmp);
+
 
   while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
 
@@ -416,6 +446,8 @@ void KMerge::BuilderTask::execute() {
     params.kmerge->dlog << dlib::LERROR << params.group_name << " - Error code: " << rc;
     return;
   }
+
+  params.kmerge->add_property(nz_count, (params.group_name + std::string("|size")).c_str(), params.db);
 
   uint partitions = ceil((double) hashes.size()/KMerge::PARTITION_SIZE);
 
@@ -449,11 +481,12 @@ void KMerge::BuilderTask::execute() {
     std::vector<uint>().swap(sub_counts);
 
   }
-
-  if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
-    params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
-    unqlite_close(params.db);
-    return;
+  if(params.is_ref) {
+    if(!(params.kmerge->add_taxonomy(params.group_name, params.db))) {
+      params.kmerge->dlog << dlib::LERROR << "Unable to add classifications for " << params.group_name;
+      unqlite_close(params.db);
+      return;
+    }
   }
 
 
@@ -503,7 +536,9 @@ void KMerge::CountAndHashSeq::operator() (long i) const {
       }
       hash = params.kmerge->hash_kmer(kmer);
       while (!params.ready) params.cv->wait(lck);
+      params.writing[i] = 1;
       hashed_counts[hash]++;
+      params.writing[i] = 0;
       counter++;
     }
   }
