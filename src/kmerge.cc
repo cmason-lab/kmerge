@@ -183,6 +183,25 @@ std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > KM
 
 }
 
+std::vector<uint> KMerge::compress2(const std::vector<uint>& data) {
+  int num_bytes = data.size() * sizeof(uint);
+  char* dest = new char[num_bytes];
+  int comp_size = LZ4_compress((char*) data.data(), dest, num_bytes);
+  std::vector<uint> compressed((uint*)dest, (uint*)dest + comp_size/sizeof(uint));
+  delete [] dest;
+  return compressed;
+}
+
+std::vector<uint> KMerge::uncompress2(const std::vector<uint>& compressed, uint uncompressed_length) {
+  int num_bytes = uncompressed_length * sizeof(uint);
+  char* dest = new char[num_bytes];
+  int comp_size = LZ4_decompress_fast ((char*) compressed.data(), dest, num_bytes);
+  std::vector<uint> data((uint*)dest, (uint*)dest + num_bytes/sizeof(uint));
+  delete [] dest;
+  return data;
+
+}
+
 
 
 bool KMerge::add_property(uint size, const std::string& key, unqlite *db) {

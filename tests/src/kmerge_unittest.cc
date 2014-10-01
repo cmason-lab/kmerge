@@ -12,7 +12,6 @@
 #include <sys/stat.h>
 #include <chrono>
 #include <random>
-#include <google/sparsetable>
 
 TEST_CASE("CompressHashesTest", "CompressionTest") {
   size_t N = 10 * 1000;
@@ -27,6 +26,26 @@ TEST_CASE("CompressHashesTest", "CompressionTest") {
   
 
   std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > mydataback = KMerge::uncompress(compressed_output, N);
+
+  for (uint i = 0; i <= mydata.size(); i++) {
+    REQUIRE(mydata[i] == mydataback[i]);
+  }
+
+}
+
+TEST_CASE("CompressHashesTestLZ4", "CompressionTest") {
+  size_t N = 10 * 1000;
+  std::vector<uint> mydata(N);
+  for(uint32_t i = 0; i < N;i += 150) mydata[i] = i;
+
+  std::vector<uint> compressed_output = KMerge::compress2(mydata);
+
+  std::cout<<std::setprecision(3);
+  std::cout<<"You are using " << 8.0 * static_cast<double>(compressed_output.size()) /
+    static_cast<double>(mydata.size()) <<" bits per integer. "<<std::endl;
+  
+
+  std::vector<uint> mydataback = KMerge::uncompress2(compressed_output, N);
 
   for (uint i = 0; i <= mydata.size(); i++) {
     REQUIRE(mydata[i] == mydataback[i]);

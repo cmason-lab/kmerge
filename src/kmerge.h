@@ -13,7 +13,7 @@
 #include "fastpfor/memutil.h"
 #include <mutex>     
 #include <condition_variable>
-
+#include "lz4.h"
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -74,7 +74,9 @@ class KMerge {
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);
+  static std::vector<uint> compress2(const std::vector<uint>&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint); 
+  static std::vector<uint> uncompress2(const std::vector<uint>&, uint);
   static double memory_used(void);
   static void dump_hashes(ulib::chain_hash_map<uint, uint>&, std::string&);
   static void load_hashes(btree::btree_map<uint, uint>&, std::string&);
