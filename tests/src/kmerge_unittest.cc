@@ -237,6 +237,8 @@ TEST_CASE("HashMapDump", "ConcurrentTest") {
 
   KMerge::load_hashes(l_map, filename);
 
+  REQUIRE(l_map.size() == 4);
+
   uint i = 0;
   for (btree::btree_map<uint, uint>::const_iterator iter = l_map.begin(); iter != l_map.end(); iter++) {
     REQUIRE(l_map[i] == i);
@@ -248,17 +250,6 @@ TEST_CASE("HashMapDump", "ConcurrentTest") {
 
 }
 
-TEST_CASE("QuickTest", "[Test]") {
-  std::set<uint> t;
-
-  for(uint i = 0; i < MAX_UINT_VAL; i++) {
-    t.insert(i);
-  }
-
-  REQUIRE(t.size() == MAX_UINT_VAL);
-
-  std::cout << "Current memory usage in GB: " << KMerge::memory_used() << std::endl;
-}
 
 TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
   btree::btree_map<uint, uint> m;
@@ -384,6 +375,8 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   ulib::chain_hash_map<uint,uint> hashed_counts(100000000);
   param_struct params;
   std::vector<std::string> files;
+  std::mutex mtx;
+  std::condition_variable cv;
 
   params.k_val_start = 3;
   params.k_val_end = 7;
@@ -391,6 +384,16 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   params.seq_filename = "/home/darryl/Development/kmerge/tests/208831/208831.fasta.gz";
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;  
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
+
 
 
   //~/bin/kanalyze-0.9.5/count -d 20 -f fastagz -k 3 -o 208831/sample.k3.txt 208831/208831.fasta.gz
@@ -401,7 +404,7 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k5.txt");
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k7.txt");
 
-  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".");
+  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".", MIN_MEM);
 
   params.kmerge = kmerge;
 
@@ -441,6 +444,9 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   btree::btree_map<uint, uint> jf_hashed_counts;
   param_struct params;
   std::vector<std::string> files;
+  std::mutex mtx;
+  std::condition_variable cv;
+
 
   params.k_val_start = 3;
   params.k_val_end = 7;
@@ -448,6 +454,16 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
   params.group_name = "sample";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;  
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
+
 
   //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 3 -o sample/sample.k3.txt sample/sample.fastq.gz
   //~/bin/kanalyze-0.9.5/count -d 20 -f fastqgz -k 5 -o sample/sample.k5.txt sample/sample.fastq.gz
@@ -458,7 +474,7 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k7.txt");
 
 
-  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".");
+  KMerge *kmerge = new KMerge(params.db_filename.c_str(), "lookup3", ".", MIN_MEM);
 
   params.kmerge = kmerge;
 
@@ -501,6 +517,9 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
   int l;
   param_struct params;
+  std::mutex mtx;
+  std::condition_variable cv;
+
   
   params.k_val_start = 3;
   params.k_val_end = 11;
@@ -508,9 +527,18 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   params.seq_filename = "/zenodotus/masonlab/pathomap_scratch/darryl/k-mer/data/208831/208831.fasta.gz";
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
   
 
-  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".", MIN_MEM);
   params.kmerge = kmerge;
 
   KMerge::CountAndHashSeq func(params, hashed_counts, true);
@@ -525,9 +553,11 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
 
 TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
   ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
+  std::mutex mtx;
+  std::condition_variable cv;
 
 
-  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".");
+  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".", MIN_MEM);
   param_struct params;
 
   params.k_val_start = 3;
@@ -537,6 +567,15 @@ TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
   params.group_name = "sample";
   params.kmerge = kmerge;
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
 
 
   KMerge::CountAndHashSeq func(params, hashed_counts, false);
@@ -554,7 +593,7 @@ TEST_CASE("TestHashedKmersAndReverseComplementReturnSameHashVal", "[HashTest]") 
   REQUIRE(rc_test_seq == "CTAGT");
 
 
-  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".");
+  KMerge *kmerge = new KMerge("dummy.db", "lookup3", ".", MIN_MEM);
   
   uint hash1 = kmerge->hash_kmer(test_seq), hash2 = kmerge->hash_kmer(rc_test_seq);
   REQUIRE(hash1 == hash2);
@@ -573,6 +612,8 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   uint kmer2_pos = 0;
   uint pos = 0;
   param_struct params;
+  std::mutex mtx;
+  std::condition_variable cv;
 
 
   params.k_val_start = 5;
@@ -583,10 +624,19 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.priority = 1;
   params.lock_filename = params.db_filename + std::string(".lck");
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
   
 
 
-  KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  KMerge* kmerge = new KMerge(params.db_filename, "lookup3", ".", MIN_MEM);
   params.kmerge = kmerge;
   
   bool success = kmerge->count_hashed_kmers(params, hashed_counts, true);
@@ -751,9 +801,7 @@ TEST_CASE("ParseKmerCountsDumpMapAndCreateDB", "[HashTest]") {
 
   if( remove( params.db_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
-  if( remove( params.dump_filename.c_str() ) != 0 )
-    perror( "Error deleting file" );
- 
+
 
 }
 
@@ -786,7 +834,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   params.writing.resize(params.num_threads, 0);
   params.polling_done = false;
 
-  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".", MIN_MEM);
 
   params.kmerge = kmerge;
 
@@ -859,8 +907,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   unqlite_close(db);
 
   if( remove( params.db_filename.c_str() ) != 0 )
-    perror( "Error deleting file" );
-  if( remove( params.dump_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
 
 }
@@ -1303,12 +1349,6 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
   if( remove( params1.db_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
-  if( remove( params1.dump_filename.c_str() ) != 0 )
-    perror( "Error deleting file" );
-  if( remove( params2.dump_filename.c_str() ) != 0 )
-    perror( "Error deleting file" );
-  if( remove( params3.dump_filename.c_str() ) != 0 )
-    perror( "Error deleting file" );
 
 
 }
@@ -1317,15 +1357,26 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   ulib::chain_hash_map<uint, uint> hashed_counts(100000000);
   ulib::chain_hash_map<uint, uint>::const_iterator m_iter;
   param_struct params;
+  std::mutex mtx;
+  std::condition_variable cv;
 
   params.k_val_start = 5;
   params.k_val_end = 5;
   params.seq_filename = "/home/darryl/Development/kmerge/tests/genome.test.fasta.gz";
   params.group_name = "org1";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+  params.dump_mtx = &mtx;
+  params.cv = &cv;
+  params.ready = true;
+  params.finished_hashing = false;
+  params.hashed_counts = &hashed_counts;
+  params.is_ref = true;
+  params.dump_filename = "hashes.bin";
+  params.writing.resize(params.num_threads, 0);
+  params.polling_done = false;
 
 
-  params.kmerge = new KMerge(params.db_filename, "lookup3", ".");
+  params.kmerge = new KMerge(params.db_filename, "lookup3", ".", MIN_MEM);
   bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -1337,7 +1388,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge(params.db_filename, "spooky", ".");
+  params.kmerge = new KMerge(params.db_filename, "spooky", ".", MIN_MEM);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -1349,7 +1400,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge(params.db_filename, "city", ".");
+  params.kmerge = new KMerge(params.db_filename, "city", ".", MIN_MEM);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
   REQUIRE(success == true);
 
@@ -1378,7 +1429,7 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   REQUIRE(rc == UNQLITE_OK);
 
   
-  KMerge *kmerge = new KMerge(db_filename, "lookup3", ".");
+  KMerge *kmerge = new KMerge(db_filename, "lookup3", ".", MIN_MEM);
 
   kmerge->add_taxonomy(group, db);
 

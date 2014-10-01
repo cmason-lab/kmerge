@@ -20,7 +20,7 @@ KSEQ_INIT(gzFile, gzread)
 #define MAX_UINT_VAL 4294967295 //2^32-1
 #define BYTES_IN_GB 1073741824.0
 #define BYTE_ALIGNED_SIZE 16
-#define MIN_MEM 0 //GB
+#define MIN_MEM 60 //GB
 #define POLL_INTERVAL 5 //seconds
 
 using namespace std;
@@ -70,7 +70,7 @@ class KMerge {
   static const uint INIT_MAP_CAPACITY = 100000000; //used to initialize chain_hash_map
   static const uint PARTITION_SIZE = 500000000;
 
-  KMerge(const std::string&, const std::string&, const std::string&, double max_gb=MIN_MEM);
+  KMerge(const std::string&, const std::string&, const std::string&, double);
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);

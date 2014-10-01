@@ -16,11 +16,12 @@ KMerge::KMerge (const std::string& filename, const std::string& hash_func, const
   this->filename = filename;
   this->dir = dir;
   this->dlog.set_level(dlib::LALL);
-  //if (max_gb < MIN_MEM) {
+  if (max_gb < MIN_MEM) {
+    this->dlog << dlib::LINFO << "Setting minimum memory to " << MIN_MEM << " GB";
     this->max_gb = MIN_MEM;
-    /*} else {
+  } else {
     this->max_gb = max_gb;
-    }*/
+  }
 
   if (hash_func == "lookup3") {
     this->hash_type = LOOKUP3;
@@ -105,8 +106,7 @@ void KMerge::load_hashes(btree::btree_map<uint, uint>& i_map, std::string& filen
   std::ifstream ifs(filename.c_str(), ios::in | ios::binary);
   uint hash, value;
 
-  while (ifs.good()) {
-    ifs >> hash >> value;
+  while (ifs >> hash >> value) {
     i_map[hash] += value;
   }
 
@@ -157,7 +157,7 @@ bool KMerge::add_hash(btree::btree_map<uint, uint>& hashed_counts, uint kmer_has
 bool KMerge::count_hashed_kmers(param_struct& params,  ulib::chain_hash_map<uint, uint>& hashed_counts, bool print_status) {
   KMerge::CountAndHashSeq func(params, hashed_counts, print_status);
   dlib::parallel_for(params.num_threads, (params.k_val_start + 1) / 2, (params.k_val_end + 1) / 2 + 1, func);
-
+  params.finished_hashing = true; // stop memory polling
   return true;
 }
 
@@ -383,6 +383,10 @@ void KMerge::build(param_struct& params) {
   std::vector<uint>().swap( hashes );
   std::vector<uint>().swap( counts );
 
+  if( remove( params.dump_filename.c_str() ) != 0 )
+    params.kmerge->dlog << dlib::LERROR << "Error deleting dump file";
+
+
   return;
 
 }
@@ -404,7 +408,6 @@ void KMerge::BuilderTask::execute() {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
-  params.finished_hashing = true; // stop memory polling
   while (!params.polling_done) sleep(5); 
   
   KMerge::dump_hashes(*(params.hashed_counts), params.dump_filename);
@@ -505,6 +508,10 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint>().swap( hashes );
   counts.clear();
   std::vector<uint>().swap( counts );
+
+  if( remove( params.dump_filename.c_str() ) != 0 )
+    params.kmerge->dlog << dlib::LERROR << "Error deleting dump file";
+
 
   return;
 
