@@ -73,16 +73,16 @@ class KMerge {
   KMerge(const std::string&, const std::string&, const std::string&, double);
   ~KMerge();
   static std::string rev_comp(const std::string&);
-  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compress(const std::vector<uint>&);
-  static std::vector<uint> compress2(const std::vector<uint>&);
-  static std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >&, uint); 
-  static std::vector<uint> uncompress2(const std::vector<uint>&, uint);
+  static std::vector<uint> compress(const std::vector<uint>&);
+  static std::vector<uint> uncompress(const std::vector<uint>&, uint);
   static double memory_used(void);
   static void dump_hashes(ulib::chain_hash_map<uint, uint>&, std::string&);
   static void load_hashes(btree::btree_map<uint, uint>&, std::string&);
   void poll_memory(param_struct&);
   void build(param_struct&);
   bool count_hashed_kmers(param_struct&, ulib::chain_hash_map<uint, uint>&, bool);
+  bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool);
+  bool hash_seq(std::string&, uint, btree::btree_map<uint, uint>&, std::mutex&);
   bool add_property(uint, const std::string&, unqlite*);
   bool add_dataset(const std::vector<uint>&, const std::string&, unqlite*, bool);
   bool add_dataset(const uint, const uint*, param_struct&);
@@ -108,6 +108,25 @@ class KMerge {
       ~BuilderTask() {
       }
   };
+
+  class HashSeq {
+  public:
+    param_struct& params;
+    btree::btree_map<uint, uint>& hashed_counts;
+    const std::vector<std::tuple<uint, uint, uint, uint> >& coords;
+    std::mutex& mtx;
+    const std::vector<std::string>& seqs;
+    bool print_status;
+
+    void operator() (long i) const;
+
+  HashSeq(param_struct& params_, const std::vector<std::string>& seqs_, btree::btree_map<uint, uint>& hashed_counts_, const std::vector<std::tuple<uint, uint,uint,uint> >& coords_, std::mutex& mtx_, bool print_status_) : params(params_), seqs(seqs_), hashed_counts(hashed_counts_), coords(coords_), mtx(mtx_), print_status(print_status_) {}
+    
+
+    ~HashSeq() {}
+  };
+  
+  
 
   class CountAndHashSeq {
   public:

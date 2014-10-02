@@ -161,29 +161,76 @@ bool KMerge::count_hashed_kmers(param_struct& params,  ulib::chain_hash_map<uint
   return true;
 }
 
-std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > KMerge::compress(const std::vector<uint>& data) {
-  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
-  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed(data.size()*1.1);
-  size_t compressedsize = compressed.size();
-  codec.encodeArray(data.data(), data.size(),
-                    compressed.data(), compressedsize);
-  compressed.resize(compressedsize);
-  compressed.shrink_to_fit();
-  return compressed;
+bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, uint>& hashed_counts, bool print_status) {
+  std::vector<std::tuple<uint, uint, uint, uint> > coords;
+  uint pieces, piece_length;
+  std::mutex mtx;
+  kseq_t *seq;
+  gzFile fp;
+  std::vector<std::string> seqs;
+  uint seq_id;
+  int l;
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  seq_id = 0;
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    seqs.push_back(seq_str);
+    uint str_len = seq_str.size();
+    for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+      if (str_len < k) {
+        continue;
+      } else {
+        pieces = params.num_threads;
+        piece_length = str_len / pieces;
+      }
+      uint pos = 0;
+      while (pos < str_len) {
+        uint start = pos, end = pos + piece_length + k - 1;
+        if (end > str_len) end = str_len;
+        coords.push_back(std::make_tuple(seq_id, k, start, end));
+        pos += piece_length;
+        if (end == str_len) break; // all sequence has been accounted for                                                                                                              
+      }
+    }
+    seq_id++;
+  }
+  KMerge::HashSeq func(params, seqs, hashed_counts, coords, mtx, print_status);
+  dlib::parallel_for(params.num_threads, 0, coords.size(), func);
+  coords.clear();
+  kseq_destroy(seq);
+  gzclose(fp);
+
+  return true;
 }
 
-  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > KMerge::uncompress(const std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> >& compressed, uint uncompressed_length) {
-  FastPForLib::IntegerCODEC & codec =  * FastPForLib::CODECFactory::getFromName("simdfastpfor");
-  std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > data(uncompressed_length);
-  size_t recoveredsize = data.size();
-  codec.decodeArray(compressed.data(),
-                    compressed.size(), data.data(), recoveredsize);
-  data.resize(recoveredsize);
-  return data;
+bool KMerge::hash_seq(std::string& seq, uint k, btree::btree_map<uint, uint>& hashed_counts, std::mutex& mtx) {
+  std::vector<uint> hashes;
+  uint hash;
 
+  for (uint j = 0; j < seq.size() - k + 1; j++) {
+    std::string kmer = seq.substr(j, k);
+    std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+    if(kmer.find_first_not_of("ACGT") != std::string::npos) { 
+      // skip kmers containing non-nucleotides            
+      continue;
+    }
+    hash = this->hash_kmer(kmer);
+    hashes.push_back(hash);
+  }
+
+  mtx.lock();
+  for (auto it = hashes.begin(); it != hashes.end(); it++) hashed_counts[*it]++;
+  mtx.unlock();
+
+  hashes.clear();
+  std::vector<uint>().swap(hashes);
+  return true;
 }
 
-std::vector<uint> KMerge::compress2(const std::vector<uint>& data) {
+
+std::vector<uint> KMerge::compress(const std::vector<uint>& data) {
   int num_bytes = data.size() * sizeof(uint);
   char* dest = new char[num_bytes];
   int comp_size = LZ4_compress((char*) data.data(), dest, num_bytes);
@@ -192,7 +239,7 @@ std::vector<uint> KMerge::compress2(const std::vector<uint>& data) {
   return compressed;
 }
 
-std::vector<uint> KMerge::uncompress2(const std::vector<uint>& compressed, uint uncompressed_length) {
+std::vector<uint> KMerge::uncompress(const std::vector<uint>& compressed, uint uncompressed_length) {
   int num_bytes = uncompressed_length * sizeof(uint);
   char* dest = new char[num_bytes];
   int comp_size = LZ4_decompress_fast ((char*) compressed.data(), dest, num_bytes);
@@ -229,7 +276,8 @@ bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& key, 
 
   if (compress == true) {
     this->dlog << dlib::LINFO << "Compressing data for " << key;
-    std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed = KMerge::compress(data);
+    //std::vector<uint, FastPForLib::AlignedSTLAllocator<uint, BYTE_ALIGNED_SIZE> > compressed = KMerge::compress(data);
+    std::vector<uint> compressed = KMerge::compress(data);
     this->dlog << dlib::LINFO << data.size() << "-->" << compressed.size();
     this->dlog << dlib::LINFO << "Finished compressing data for " << key;
     rc = unqlite_kv_store(db,key.c_str(),-1,&compressed[0],sizeof(uint)*compressed.size());
@@ -418,26 +466,18 @@ void KMerge::BuilderTask::check_memory() {
 void KMerge::BuilderTask::execute() {
   stringstream file_name, file_loc;
   uint nz_count;
+  btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, *(params.hashed_counts), params.is_ref))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, params.is_ref))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
     params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
   }
 
-  while (!params.polling_done) sleep(5); 
-  
-  KMerge::dump_hashes(*(params.hashed_counts), params.dump_filename);
+  nz_count = hashed_counts.size();
 
-  btree::btree_map<uint, uint> tmp;
-  
-  params.kmerge->dlog <<dlib::LINFO << "Loading hashes for " << params.group_name;
-  KMerge::load_hashes(tmp, params.dump_filename);
-  params.kmerge->dlog <<dlib::LINFO << "Finished loading hashes for " << params.group_name;
-
-  nz_count = tmp.size();
   params.kmerge->dlog << dlib::LINFO << "Hashes vector size: " << nz_count << " for " << params.group_name;
 
 
@@ -445,7 +485,7 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint> hashes(nz_count), counts(nz_count);
 
   uint i = 0;
-  for (btree::btree_map<uint, uint>::const_iterator m_iter = tmp.begin(); m_iter != tmp.end(); m_iter++) {
+  for (btree::btree_map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
     hashes[i] = m_iter->first;
     counts[i] = m_iter->second;
     i++;
@@ -454,8 +494,8 @@ void KMerge::BuilderTask::execute() {
   params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
 
   // remove all elements from map as they are no longer needed
-  tmp.clear();
-  btree::btree_map<uint,uint>().swap(tmp);
+  hashed_counts.clear();
+  btree::btree_map<uint,uint>().swap(hashed_counts);
 
 
   while (mkdir(params.lock_filename.c_str(), 0644) == -1) sleep(params.priority); //process level lock
@@ -528,12 +568,24 @@ void KMerge::BuilderTask::execute() {
   counts.clear();
   std::vector<uint>().swap( counts );
 
-  if( remove( params.dump_filename.c_str() ) != 0 )
-    params.kmerge->dlog << dlib::LERROR << "Error deleting dump file";
-
-
   return;
 
+}
+
+void KMerge::HashSeq::operator() (long i) const {
+  std::tuple<uint, uint, uint, uint> coord = coords[i];
+  uint seq_id = std::get<0>(coord);
+  std::string seq = seqs[seq_id];
+  uint k = std::get<1>(coord);
+  uint start = std::get<2>(coord);
+  uint end = std::get<3>(coord);
+  std::string piece(seq.begin() + start, seq.begin() + end);
+
+  if (print_status) params.kmerge->dlog << dlib::LINFO << "Processing " << params.group_name << "|" << seq_id << "|" << start << ":" << end;
+  
+  params.kmerge->hash_seq(piece, k, hashed_counts, mtx);
+ 
+  if (print_status) params.kmerge->dlog << dlib::LINFO << "Finished processing " << params.group_name << "|" << seq_id << "|" << start << ":" << end;
 }
 
 void KMerge::CountAndHashSeq::operator() (long i) const {
