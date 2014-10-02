@@ -20,11 +20,11 @@ CXXFLAGS += -g -Wall -Wextra $(OPT) -DDLIB_NO_GUI_SUPPORT -pthread -w
 TESTS = kmerge_unittest
 
 #CXX=$(HOME_DIR)/hdf5-1.8.13/bin/h5c++ -std=c++11 -mssse3
-CXX=g++ -std=c++11 -mssse3
+CXX=g++ -std=c++11
 
 # libraries to include
 
-LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lulib -lpthread -lFastPFor_lib -lunqlite -llz4
+LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lpthread
 
 # House-keeping build targets.
 
