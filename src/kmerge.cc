@@ -485,8 +485,15 @@ void KMerge::BuilderTask::execute() {
   std::vector<uint> hashes(nz_count), counts(nz_count);
 
   uint i = 0;
-  for (btree::btree_map<uint, uint>::const_iterator m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
-    hashes[i] = m_iter->first;
+  uint last;
+  for (auto m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
+    if (i == 0) {
+      hashes[i] = m_iter->first;
+      last = m_iter->first;
+    } else {
+      hashes[i] = m_iter->first - last;
+      last = m_iter->first;
+    }
     counts[i] = m_iter->second;
     i++;
   }

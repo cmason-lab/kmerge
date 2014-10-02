@@ -504,6 +504,8 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 
   unqlite_close(params.db);
 
+  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
+
   REQUIRE(hashes_in.size() == 6091121);
   REQUIRE(counts_in.size() == 6091121);
 
@@ -530,7 +532,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.fastq.gz";
   params.group_name = "sample";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
-  params.is_ref = true;
+  params.is_ref = false;
 
   KMerge *kmerge = new KMerge(params.db_filename, "lookup3", ".", MIN_MEM);
 
@@ -590,8 +592,12 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
     hashes_in.insert(hashes_in.end(), part_hashes.begin(), part_hashes.end());
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
   }
+ 
+  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
+  
   REQUIRE(hashes_in.size() == 8727);
   REQUIRE(counts_in.size() == 8727);
+  
   //ensure that hashes are in sorted order
   uint last = 0;
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
@@ -727,6 +733,8 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     
   }
 
+  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
+
   REQUIRE(hashes_in.size() == 512);
   REQUIRE(counts_in.size() == 512);
 
@@ -836,7 +844,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     
   }
 
-
+  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
 
   //ensure that hashes are in sorted order
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
@@ -941,6 +949,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
     counts_in.insert(counts_in.end(), part_counts.begin(), part_counts.end());
   }
 
+  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
 
   //ensure that hashes are in sorted order
   for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
