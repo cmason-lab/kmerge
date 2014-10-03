@@ -79,7 +79,7 @@ uint KMerge::hash_kmer(const std::string& kmer) {
 }
 
 
-bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, uint>& hashed_counts, bool print_status) {
+bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, uint>& hashed_counts, bool split, bool print_status) {
   std::vector<std::tuple<uint, uint, uint, uint> > coords;
   uint pieces, piece_length;
   std::mutex mtx;
@@ -102,6 +102,12 @@ bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, ui
       } else {
         pieces = params.num_threads;
         piece_length = str_len / pieces;
+	if (piece_length < k) {
+	  piece_length = k;
+	}
+	if (!split) {
+	  piece_length = str_len; // if hashing FASTQ sequences, don't split
+	}
       }
       uint pos = 0;
       while (pos < str_len) {
@@ -210,7 +216,7 @@ void KMerge::BuilderTask::execute() {
   btree::btree_map<uint, uint> hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, params.is_ref))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, params.is_ref, params.is_ref))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {

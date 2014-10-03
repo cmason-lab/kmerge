@@ -898,7 +898,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
 
 
   params.kmerge = new KMerge("lookup3", ".");
-  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
   for(auto m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -910,7 +910,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge("spooky", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
   for(auto m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
@@ -922,7 +922,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   delete params.kmerge;
 
   params.kmerge = new KMerge("city", ".");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true);
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
 
