@@ -8,10 +8,10 @@
 #include <math.h>
 #include <fstream>
 #include <numeric>
-#include <google/sparsetable>
 #include "chooseser.h"
 
 typedef dlib::compress_stream::kernel_3b cs;
+#define MAX_UINT_VAL 4294967295 //2^32-1
 
 using namespace std;
 
@@ -23,7 +23,6 @@ public:
   void execute() {
 
     std::vector<uint> hashes_in, counts_in;
-    google::sparsetable<uint> h_counts;
     cs compressor, decompressor;
     std::ifstream ifs;
     std::ofstream ofs;
@@ -41,8 +40,7 @@ public:
     std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
 
     dlog << dlib::LINFO << "Pickling hashes";
-
-    Array<uint> p_hashes(hashes_in.size());
+    Array<uint> p_hashes(MAX_UINT_VAL);
 
     for (std::vector<uint>::const_iterator it = hashes_in.begin(); it != hashes_in.end(); it++) {
       p_hashes.append(*it);
@@ -68,7 +66,7 @@ public:
     ss.str(std::string());
 
     dlog << dlib::LINFO << "Pickling counts";    
-    Array<uint> p_counts(counts_in.size());
+    Array<uint> p_counts(MAX_UINT_VAL);
 
     for (std::vector<uint>::const_iterator it = counts_in.begin(); it != counts_in.end(); it++) {
       p_counts.append(*it);
