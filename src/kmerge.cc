@@ -8,8 +8,9 @@
 
 using namespace std;
 
-KMerge::KMerge (const std::string& hash_func, const std::string& dir): dlog("kmerge") {
+KMerge::KMerge (const std::string& hash_func, const std::string& dir, const std::string& out_dir): dlog("kmerge") {
   this->dir = dir;
+  this->out_dir = out_dir;
   this->dlog.set_level(dlib::LALL);
 
   if (hash_func == "lookup3") {
@@ -173,7 +174,7 @@ bool KMerge::add_taxonomy(const std::string& group_name) {
   std::map<std::string, std::string> taxonomy;
   std::stringstream path_root, in_file_ss;
   std::string line;
-  std::ofstream fs(std::string(this->dir + "/" + group_name + "/taxonomy.bin").c_str(), ios::binary);
+  std::ofstream fs(std::string(this->out_dir + "/" + group_name + ".taxonomy.bin").c_str(), ios::binary);
 
 
 

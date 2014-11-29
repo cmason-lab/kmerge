@@ -41,12 +41,13 @@ class KMerge {
  private:
   HashEnumType hash_type;
   std::string dir;
+  std::string out_dir;
   dlib::logger dlog;
   std::string filename;
 
  public:
 
-  KMerge(const std::string&, const std::string&);
+  KMerge(const std::string&, const std::string&, const std::string&);
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType);

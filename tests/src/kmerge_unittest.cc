@@ -163,7 +163,7 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k5.txt");
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k7.txt");
 
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
 
   params.kmerge = kmerge;
  
@@ -234,7 +234,7 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k7.txt");
 
 
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
 
   params.kmerge = kmerge;
 
@@ -299,7 +299,7 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
   params.kmerge = kmerge;
 
  
@@ -375,7 +375,7 @@ TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
   params.group_name = "sample";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
   params.kmerge = kmerge;
 
 
@@ -453,12 +453,12 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   params.k_val_end = 13;
   params.group_name = "208831";
   params.seq_filename = std::string("./") + params.group_name + std::string("/") + params.group_name + std::string(".fasta.gz");
-  params.hashes_filename = std::string("./") + params.group_name + std::string("/hashes.bin");
-  params.counts_filename = std::string("./") + params.group_name + std::string("/counts.bin");
+  params.hashes_filename = std::string("./reference/") + params.group_name + std::string(".hashes.bin");
+  params.counts_filename = std::string("./reference/") + params.group_name + std::string(".counts.bin");
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.is_ref = true;
 
-  KMerge* kmerge = new KMerge("lookup3", ".");
+  KMerge* kmerge = new KMerge("lookup3", ".", "./reference");
   params.kmerge = kmerge;
   
   KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
@@ -491,7 +491,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   if( remove( params.counts_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
 
-  if( remove( std::string("./" + params.group_name + "/taxonomy.bin").c_str() ) != 0 )
+  if( remove( std::string("./reference/" + params.group_name + ".taxonomy.bin").c_str() ) != 0 )
     perror( "Error deleting file" );
 }
 
@@ -511,13 +511,13 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   params.k_val_end = 7;
   params.group_name = "sample";
   params.seq_filename = std::string("./") + params.group_name + std::string("/") + params.group_name + std::string(".fastq.gz");
-  params.hashes_filename = std::string("./") + params.group_name + std::string("/hashes.bin");
-  params.counts_filename = std::string("./") + params.group_name + std::string("/counts.bin");
+  params.hashes_filename = std::string("./reference/") + params.group_name + std::string(".hashes.bin");
+  params.counts_filename = std::string("./reference/") + params.group_name + std::string(".counts.bin");
 
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.is_ref = false;
 
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
 
   params.kmerge = kmerge;
 
@@ -589,22 +589,22 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
   params1.group_name = "208831";
   params1.seq_filename = std::string("./") + params1.group_name + std::string("/") + params1.group_name + std::string(".fasta.gz");
-  params1.hashes_filename = std::string("./") + params1.group_name + std::string("/hashes.bin");
-  params1.counts_filename = std::string("./") + params1.group_name + std::string("/counts.bin");
+  params1.hashes_filename = std::string("./reference/") + params1.group_name + std::string(".hashes.bin");
+  params1.counts_filename = std::string("./reference/") + params1.group_name + std::string(".counts.bin");
   params1.num_threads = (params1.k_val_end - params1.k_val_start) / 2 + 1;
   params1.is_ref = true;
 
   params2.group_name = "209328";
   params2.seq_filename = std::string("./") + params2.group_name + std::string("/") + params2.group_name + std::string(".fasta.gz");
-  params2.hashes_filename = std::string("./") + params2.group_name + std::string("/hashes.bin");
-  params2.counts_filename = std::string("./") + params2.group_name + std::string("/counts.bin");
+  params2.hashes_filename = std::string("./reference/") + params2.group_name + std::string(".hashes.bin");
+  params2.counts_filename = std::string("./reference/") + params2.group_name + std::string(".counts.bin");
   params2.num_threads = (params2.k_val_end - params2.k_val_start) / 2 + 1;
   params2.is_ref = true;
 
   params3.group_name = "54095";
   params3.seq_filename = std::string("./") + params3.group_name + std::string("/") + params3.group_name + std::string(".fasta.gz");
-  params3.hashes_filename = std::string("./") + params3.group_name + std::string("/hashes.bin");
-  params3.counts_filename = std::string("./") + params3.group_name + std::string("/counts.bin");
+  params3.hashes_filename = std::string("./reference/") + params3.group_name + std::string(".hashes.bin");
+  params3.counts_filename = std::string("./reference/") + params3.group_name + std::string(".counts.bin");
  
   params3.num_threads = (params3.k_val_end - params3.k_val_start) / 2 + 1;
   params3.is_ref = true;
@@ -615,7 +615,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
 
 
-  KMerge* kmerge = new KMerge("lookup3", ".");
+  KMerge* kmerge = new KMerge("lookup3", ".", "./reference");
 
   params1.kmerge = kmerge;
   params2.kmerge = kmerge;
@@ -682,7 +682,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
  
-  fs.open (std::string("./" + params1.group_name + "/taxonomy.bin").c_str(), ios::binary);
+  fs.open (std::string("./reference/" + params1.group_name + ".taxonomy.bin").c_str(), ios::binary);
   dlib::deserialize(taxonomy, fs);
   fs.close();
 
@@ -754,7 +754,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   counts_in.clear();
   std::vector<uint>().swap(counts_in);
 
-  fs.open (std::string("./" + params2.group_name + "/taxonomy.bin").c_str(), ios::binary);
+  fs.open (std::string("./reference/" + params2.group_name + ".taxonomy.bin").c_str(), ios::binary);
   dlib::deserialize(taxonomy, fs);
   fs.close();
  
@@ -827,7 +827,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   std::vector<uint>().swap(counts_in);
 
 
-  fs.open (std::string("./" + params3.group_name + "/taxonomy.bin").c_str(), ios::binary);
+  fs.open (std::string("./reference/" + params3.group_name + ".taxonomy.bin").c_str(), ios::binary);
   dlib::deserialize(taxonomy, fs);
   fs.close();
 
@@ -861,7 +861,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   if( remove( params1.counts_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
   
-  if( remove( std::string("./" + params1.group_name + "/taxonomy.bin").c_str() ) != 0)
+  if( remove( std::string("./reference/" + params1.group_name + ".taxonomy.bin").c_str() ) != 0)
     perror ("Error deleting file" );
 
   if( remove( params2.hashes_filename.c_str() ) != 0 )
@@ -870,7 +870,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   if( remove( params2.counts_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
   
-  if( remove( std::string("./" + params2.group_name + "/taxonomy.bin").c_str() ) != 0)
+  if( remove( std::string("./reference/" + params2.group_name + ".taxonomy.bin").c_str() ) != 0)
     perror ("Error deleting file" );
 
   if( remove( params3.hashes_filename.c_str() ) != 0 )
@@ -879,7 +879,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   if( remove( params3.counts_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
   
-  if( remove( std::string("./" + params3.group_name + "/taxonomy.bin").c_str() ) != 0)
+  if( remove( std::string("./reference/" + params3.group_name + ".taxonomy.bin").c_str() ) != 0)
     perror ("Error deleting file" );
 
 
@@ -897,7 +897,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   params.is_ref = true;
 
 
-  params.kmerge = new KMerge("lookup3", ".");
+  params.kmerge = new KMerge("lookup3", ".", "./reference");
   bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -909,7 +909,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge("spooky", ".");
+  params.kmerge = new KMerge("spooky", ".", "./reference");
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -921,7 +921,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge("city", ".");
+  params.kmerge = new KMerge("city", ".", "./reference");
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -945,13 +945,13 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
 
 
   
-  KMerge *kmerge = new KMerge("lookup3", ".");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
 
   kmerge->add_taxonomy(group);
 
   delete kmerge;
 
-  fs.open (std::string("./" + group + "/taxonomy.bin").c_str(), ios::binary);
+  fs.open (std::string("./reference/" + group + ".taxonomy.bin").c_str(), ios::binary);
   dlib::deserialize(taxonomy, fs);
   fs.close();
 
@@ -976,7 +976,7 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
   taxonomy.clear();
   std::map<std::string, std::string>().swap(taxonomy);
 
-  if( remove(std::string("./" + group + "/taxonomy.bin").c_str() ) != 0 )
+  if( remove(std::string("./reference/" + group + ".taxonomy.bin").c_str() ) != 0 )
     perror( "Error deleting file" );
   
 
