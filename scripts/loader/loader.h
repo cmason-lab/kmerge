@@ -20,3 +20,13 @@ std::vector<uint32_t> load_data(std::string bin_filename, bool sum) {
 
   return vec_in; 
 } 
+
+std::map<std::string, std::string> load_taxonomy(std::string bin_filename) {
+  std::map<std::string, std::string> taxonomy;
+  std::ifstream ifs(bin_filename.c_str(), std::ios::binary);
+
+  dlib::deserialize(taxonomy, ifs);
+  ifs.close();
+
+  return taxonomy;
+}

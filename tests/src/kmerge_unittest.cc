@@ -12,6 +12,31 @@
 #include <sys/stat.h>
 
 
+TEST_CASE("GenerateAllKMersOfGivenLength", "[KmerGenerator]") {
+  std::set<uint> lookup3_set, city_set, murmur_set;
+  int i, k=7;
+  unsigned long long x, y;
+  
+  std::string kmer;
+  uint count = 0;
+  
+  for (x = 0; x < 1ULL<<(2*k); ++x) {
+    for (i = 0, y = x; i < k; ++i, y >>= 2)
+      kmer.push_back("ACGT"[y&3]);
+    count++;
+    lookup3_set.insert(KMerge::hash_kmer(kmer, LOOKUP3));
+    city_set.insert(KMerge::hash_kmer(kmer, MURMUR));
+    murmur_set.insert(KMerge::hash_kmer(kmer, CITY));
+    kmer.clear();
+  }
+  
+  REQUIRE(pow(4,k) == count);
+  REQUIRE((pow(4,k) / 2) == lookup3_set.size());
+  REQUIRE((pow(4,k) / 2) == city_set.size());
+  REQUIRE((pow(4,k) / 2) == murmur_set.size());
+
+}
+
 
 TEST_CASE("BTreeMapIsSortedTest", "[ContainerTest]") {
   btree::btree_map<uint, uint> m;

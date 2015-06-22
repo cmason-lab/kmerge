@@ -18,7 +18,7 @@ def get_taxonomy(d, ncbi_pjid, classifications): # will raise KeyError if key no
 def fetch_classifications(bioproject_ids, batch_size=20):
     if batch_size < 20:
         batch_size = 20 # minimum size for NCBI records
-    lookup = fetch_link_ids(bioproject_ids, "bioproject", "taxonomy", batch_size)
+    lookup = fetch_link_ids(bioproject_ids, "bioproject", "taxonomy", None, batch_size)
     tax_ids = [tax_id for sublist in lookup.values() for tax_id in sublist]
     bp_ids = [bp_id for bp_id in lookup.keys()]
     # reverse lookup keys and values
@@ -50,7 +50,7 @@ def fetch_non_virus_bp_ids(batch_size=20):
     if batch_size < 20:
         batch_size = 20
     pjids = []
-    handle = Entrez.esearch(db="assembly", term='(chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT suppressed_refseq[Property]', usehistory="y")
+    handle = Entrez.esearch(db="assembly", term='("Complete Genome"[ASLV] OR chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND assembly_pubmed[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT replaced[Property] NOT suppressed_refseq[Property]', usehistory="y")
     results = Entrez.read(handle)
     webenv = results["WebEnv"]
     query_key = results["QueryKey"]
@@ -58,7 +58,7 @@ def fetch_non_virus_bp_ids(batch_size=20):
     for start in range(0,count,batch_size):
         sum_handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
         summaries = Entrez.read(sum_handle,validate=False)
-        pjids.extend([ summary['RS_BioProjects'][0]['BioprojectId'] for summary in summaries['DocumentSummarySet']['DocumentSummary']])
+        pjids.extend([ summary['RS_BioProjects'][0]['BioprojectId'] for summary in summaries['DocumentSummarySet']['DocumentSummary'] if len(summary['RS_BioProjects'])])
     return pjids
 
 def fetch_virus_bp_ids(batch_size=20):
@@ -77,12 +77,15 @@ def fetch_virus_bp_ids(batch_size=20):
     pjids = [ summary['ProjectID'] for summary in summaries]
     return pjids
 
-def fetch_link_ids(lookup_ids, from_db, to_db, split_size=20):
+def fetch_link_ids(lookup_ids, from_db, to_db, linkname=None, split_size=20):
     if split_size < 20:
         split_size = 20
     results = []
     for split_ids in [ lookup_ids[i:i+split_size] for i in range(0, len(lookup_ids), split_size) ]:
-        handle = Entrez.elink(dbfrom=from_db, db=to_db, id=split_ids)
+        if linkname:
+            handle = Entrez.elink(dbfrom=from_db, db=to_db, linkname=linkname, id=split_ids)
+        else:
+            handle = Entrez.elink(dbfrom=from_db, db=to_db, id=split_ids)
         results.extend(Entrez.read(handle))
         handle.close()
 
@@ -129,7 +132,7 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
         query_key = results["QueryKey"]
         count = int(results["Count"])
         batch_size = 100
-        get_taxonomy(d, ncbi_pjid, classifications)                                                                                                    
+        get_taxonomy(d, ncbi_pjid, classifications)
         results = None
         fasta_handle = gzip.open("%s/%s.fasta.gz" % (d, ncbi_pjid), 'wb')
         for start in range(0,count,batch_size):
@@ -149,6 +152,7 @@ def process_genomes(base, ncbi_pjid, classifications, seq_format, db_dir, check_
                 fasta_handle.write(handle.read())
                 handle.close()
         fasta_handle.close()
+        #verify_genome(d, ncbi_pjid, stats)
     except (urllib2.HTTPError, AttributeError):
         #if we have a HTTPError or AttributeError, retry
         fasta_file = "%s/%s.fasta.gz" % (d, ncbi_pjid)
@@ -167,10 +171,11 @@ def main():
     parser.add_argument('-b', '--db_dir', metavar='DB_DIR', default=os.getcwd(), help='location of refseq genomic database')
     parser.add_argument('-f', '--format', metavar='FORMAT', default='fastq', help='format of input file', choices=['fasta', 'fastq', 'fastq-solexa'])
     parser.add_argument('-t', '--num_threads', metavar='NUM THREADS', default=1, type=int, help='specify number of threads to use')
-    parser.add_argument('-r', '--max_retry', metavar='MAX_RETRY', default=2, help='max number of times to retry genome download on http error') 
+    parser.add_argument('-r', '--max_retry', metavar='MAX_RETRY', default=2, help='max number of times to retry genome download on http error')
+    parser.add_argument('-e', '--email', metavar='EMAIL', help='email address to use for Entrez API queries')
     args = parser.parse_args()
 
-    Entrez.email = 'dar326@cornell.edu'
+    Entrez.email = args.email
     split_size = 100
     
     
@@ -200,6 +205,7 @@ def main():
     pjids = list(set(nv_pjids + v_pjids))
     
     classifications = fetch_classifications(pjids)
+    stats = fetch_sequence_stats(pjids)
     # get the pjids that have classifications and ignore rest
     pjids = [id for id, c in classifications.iteritems() if c != None]
 

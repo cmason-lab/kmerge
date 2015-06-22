@@ -14,30 +14,29 @@ class TestDownloadFastaFunctions(unittest.TestCase):
     def setUp(self):
         Entrez.email = 'dar326@cornell.edu'
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_fetch_non_virus_bioproject_ids(self):
         ids = process_seqs.fetch_non_virus_bp_ids()
-        self.assertGreaterEqual(len(ids), 2292) # number of results as of May 10, 2014                                                 
+        self.assertGreaterEqual(len(ids), 6530) # number of results as of June 21, 2015                                                 
         self.assertIn('128', ids) #yeast
         self.assertIn('168', ids) #human
         self.assertIn('116', ids) #arabidopsis
         self.assertIn('164', ids) #drosophila
         self.assertIn('158', ids) #c. elegans
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_fetch_virus_bioproject_ids(self):
         ids = process_seqs.fetch_virus_bp_ids()
-
-        self.assertGreaterEqual(len(ids), 761) # number of results as of May 10, 2014
+        self.assertGreaterEqual(len(ids), 1238) # number of results as of June 21, 2015
         self.assertIn('218024', ids)
         self.assertIn('15423', ids)
         self.assertIn('14331', ids)
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_fetch_nucleotide_sequence_ids(self):
-        pjids = ['169','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
-                                  '59073', '86861', '215233', '88071', '86645', '89395', '213395', '225', '128']
-        project_sequence_ids = process_seqs.fetch_link_ids(pjids, "bioproject", "nuccore")
+        pjids = ['14014', '14013', '169', '128', '215233', '225']
+        project_sequence_ids = process_seqs.fetch_link_ids(pjids, "bioproject", "nuccore", "bioproject_nuccore_genomic_dna")
+        print project_sequence_ids.keys()
         self.assertEqual(len(project_sequence_ids), len(pjids))
         self.assertIn('225', project_sequence_ids) # e. coli
         self.assertIn('545778205', project_sequence_ids['225'])
@@ -62,7 +61,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         self.assertIn('330443391', project_sequence_ids['128'])
         self.assertIn('6226515', project_sequence_ids['128'])
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_get_sequence_from_refseq(self):
         d = os.getcwd()
         fasta_handle = gzip.open("%s/sequence.fa.gz" % d, 'w+b')
@@ -73,7 +72,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         os.remove("%s/sequence.fa.gz" % d)
 
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_full_pipeline(self):
         batch_size = 200
         base = os.getcwd() + "/"
@@ -96,9 +95,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         except Exception as inst:
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
 
-
         pjids = list(set(nv_pjids[:3] + v_pjids[:3]))
-    
         classifications = process_seqs.fetch_classifications(pjids)
         # get the pjids that have classifications and ignore rest
         pjids = classifications.keys()
@@ -109,7 +106,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
         pool.wait()
 
-    #@unittest.skip("skipping")
+    @unittest.skip("skipping")
     def test_get_taxonomy(self):
         bioproject_ids = ['169','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
                                                     '59073', '86861', '215233', '88071', '86645', '89395', '213395']
