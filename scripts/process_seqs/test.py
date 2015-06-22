@@ -14,54 +14,55 @@ class TestDownloadFastaFunctions(unittest.TestCase):
     def setUp(self):
         Entrez.email = 'dar326@cornell.edu'
 
-    @unittest.skip("skipping")
-    def test_fetch_non_virus_bioproject_ids(self):
-        ids = process_seqs.fetch_non_virus_bp_ids()
-        self.assertGreaterEqual(len(ids), 6530) # number of results as of June 21, 2015                                                 
-        self.assertIn('128', ids) #yeast
-        self.assertIn('168', ids) #human
-        self.assertIn('116', ids) #arabidopsis
-        self.assertIn('164', ids) #drosophila
-        self.assertIn('158', ids) #c. elegans
+    #@unittest.skip("skipping")
+    def test_fetch_bioproject_ids(self):
+        ids_and_stats = process_seqs.fetch_assembly_ids_and_stats()
+        self.assertGreaterEqual(len(ids_and_stats), 6530) # number of results as of June 21, 2015                                                 
+        self.assertIn('285498', ids_and_stats) #yeast
+        self.assertEqual(ids_and_stats['285498']['num_sequences'], 17)
+        self.assertEqual(ids_and_stats['285498']['sequence_length'], 12157105) 
+        self.assertIn('320101', ids_and_stats) #human
+        self.assertEqual(ids_and_stats['320101']['num_sequences'], 25)
+        self.assertEqual(ids_and_stats['320101']['sequence_length'], 3226010022)
+        self.assertIn('237408', ids_and_stats) #arabidopsis
+        self.assertEqual(ids_and_stats['237408']['num_sequences'], 7)
+        self.assertEqual(ids_and_stats['237408']['sequence_length'], 119667750)
+        self.assertIn('202931', ids_and_stats) #drosophila
+        self.assertEqual(ids_and_stats['202931']['num_sequences'], 8)
+        self.assertEqual(ids_and_stats['202931']['sequence_length'], 143726002)
+        self.assertIn('266321', ids_and_stats) #hiv
+        self.assertEqual(ids_and_stats['266321']['num_sequences'], 1)
+        self.assertEqual(ids_and_stats['266321']['sequence_length'], 9181)
 
-    @unittest.skip("skipping")
-    def test_fetch_virus_bioproject_ids(self):
-        ids = process_seqs.fetch_virus_bp_ids()
-        self.assertGreaterEqual(len(ids), 1238) # number of results as of June 21, 2015
-        self.assertIn('218024', ids)
-        self.assertIn('15423', ids)
-        self.assertIn('14331', ids)
-
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_fetch_nucleotide_sequence_ids(self):
-        pjids = ['14014', '14013', '169', '128', '215233', '225']
-        project_sequence_ids = process_seqs.fetch_link_ids(pjids, "bioproject", "nuccore", "bioproject_nuccore_genomic_dna")
-        print project_sequence_ids.keys()
-        self.assertEqual(len(project_sequence_ids), len(pjids))
-        self.assertIn('225', project_sequence_ids) # e. coli
-        self.assertIn('545778205', project_sequence_ids['225'])
-        self.assertEqual(len(project_sequence_ids['225']), 1)
-        self.assertIn('128', project_sequence_ids) # yeast
-        self.assertEqual(len(project_sequence_ids['128']), 17)
-        self.assertIn('330443753', project_sequence_ids['128'])
-        self.assertIn('330443743', project_sequence_ids['128'])
-        self.assertIn('330443715', project_sequence_ids['128'])
-        self.assertIn('330443688', project_sequence_ids['128'])
-        self.assertIn('330443681', project_sequence_ids['128'])
-        self.assertIn('330443667', project_sequence_ids['128'])
-        self.assertIn('330443638', project_sequence_ids['128'])
-        self.assertIn('330443595', project_sequence_ids['128'])
-        self.assertIn('330443590', project_sequence_ids['128'])
-        self.assertIn('330443578', project_sequence_ids['128'])
-        self.assertIn('330443543', project_sequence_ids['128'])
-        self.assertIn('330443531', project_sequence_ids['128'])
-        self.assertIn('330443520', project_sequence_ids['128'])
-        self.assertIn('330443489', project_sequence_ids['128'])
-        self.assertIn('330443482', project_sequence_ids['128'])
-        self.assertIn('330443391', project_sequence_ids['128'])
-        self.assertIn('6226515', project_sequence_ids['128'])
+        asids = ['253171', '253601', '315421', '285498', '48671', '79781']
+        assembly_sequence_ids = process_seqs.fetch_link_ids(asids, "assembly", "nuccore", "assembly_nuccore_refseq")
+        self.assertEqual(len(assembly_sequence_ids), len(asids))
+        self.assertIn('79781', assembly_sequence_ids) # e. coli
+        self.assertIn('556503834', assembly_sequence_ids['79781'])
+        self.assertEqual(len(assembly_sequence_ids['79781']), 1)
+        self.assertIn('285498', assembly_sequence_ids) # yeast
+        self.assertEqual(len(assembly_sequence_ids['285498']), 17)
+        self.assertIn('330443753', assembly_sequence_ids['285498'])
+        self.assertIn('330443743', assembly_sequence_ids['285498'])
+        self.assertIn('330443715', assembly_sequence_ids['285498'])
+        self.assertIn('330443688', assembly_sequence_ids['285498'])
+        self.assertIn('330443681', assembly_sequence_ids['285498'])
+        self.assertIn('330443667', assembly_sequence_ids['285498'])
+        self.assertIn('330443638', assembly_sequence_ids['285498'])
+        self.assertIn('330443595', assembly_sequence_ids['285498'])
+        self.assertIn('330443590', assembly_sequence_ids['285498'])
+        self.assertIn('330443578', assembly_sequence_ids['285498'])
+        self.assertIn('330443543', assembly_sequence_ids['285498'])
+        self.assertIn('330443531', assembly_sequence_ids['285498'])
+        self.assertIn('330443520', assembly_sequence_ids['285498'])
+        self.assertIn('330443489', assembly_sequence_ids['285498'])
+        self.assertIn('330443482', assembly_sequence_ids['285498'])
+        self.assertIn('330443391', assembly_sequence_ids['285498'])
+        self.assertIn('6226515', assembly_sequence_ids['285498'])
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_get_sequence_from_refseq(self):
         d = os.getcwd()
         fasta_handle = gzip.open("%s/sequence.fa.gz" % d, 'w+b')
@@ -72,7 +73,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         os.remove("%s/sequence.fa.gz" % d)
 
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_full_pipeline(self):
         batch_size = 200
         base = os.getcwd() + "/"
@@ -81,37 +82,31 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
         pool = threadpool.ThreadPool(1)
 
-        nv_pjids = []
-        #non-viruses
+        ids_and_stats = []
         try:
-            nv_pjids = process_seqs.fetch_non_virus_bp_ids(batch_size)
+            ids_and_stats = process_seqs.fetch_assembly_ids_and_stats(batch_size)
         except Exception as inst:
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
 
-        v_pjids = []
-        #viruses
-        try:
-            v_pjids = process_seqs.fetch_virus_bp_ids(batch_size)
-        except Exception as inst:
-            sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
 
-        pjids = list(set(nv_pjids[:3] + v_pjids[:3]))
-        classifications = process_seqs.fetch_classifications(pjids)
-        # get the pjids that have classifications and ignore rest
-        pjids = classifications.keys()
+        classifications = process_seqs.fetch_classifications(ids_and_stats.keys()[:6])
+        # get the asids that have classifications and ignore rest
+        asids = classifications.keys()
     
-        for ncbi_pjid in pjids:
-            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_pjid, classifications, seq_format, db_dir, True, 0, 2])
+        for ncbi_asid in asids:
+            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_asid, ids_and_stats[ncbi_asid], classifications, seq_format, db_dir, True, 0, 2])
             pool.putRequest(request)
 
         pool.wait()
+        for asid in asids:
+            shutil.rmtree('./%s' % asid)
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_get_taxonomy(self):
-        bioproject_ids = ['169','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
-                                                    '59073', '86861', '215233', '88071', '86645', '89395', '213395']
-        classifications = process_seqs.fetch_classifications(bioproject_ids)
-        process_seqs.get_taxonomy(os.getcwd(), '169', classifications)
+        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438','587648','110928',
+                                                    '31388', '407318', '48671', '360488', '445688', '46691']
+        classifications = process_seqs.fetch_classifications(assembly_ids)
+        process_seqs.get_taxonomy(os.getcwd(), '315421', classifications)
         self.assertTrue(os.path.isfile('taxonomy.txt'))
         d = {}
         with open("taxonomy.txt") as f:
@@ -137,11 +132,11 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
     #@unittest.skip("skipping")
     def test_genome_to_taxonomy(self):
-        bioproject_ids = ['168','14003','162087','196786', '47493','59067','14013','162089','196787','47507','59071','14014','162091','196788','47509',
-                          '59073', '86861', '215233', '88071', '86645', '89395', '213395']
+        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438','587648','110928',
+                          '31388', '407318', '48671', '360488', '445688', '46691']
 
-        d = process_seqs.fetch_classifications(bioproject_ids)
-        self.assertEqual(len(bioproject_ids), len(d))
+        d = process_seqs.fetch_classifications(assembly_ids)
+        self.assertEqual(len(assembly_ids), len(d))
         for bp, taxonomy in d.iteritems():
             self.assertTrue('species' in taxonomy)
         
