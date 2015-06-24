@@ -16,23 +16,13 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
     #@unittest.skip("skipping")
     def test_fetch_bioproject_ids(self):
-        ids_and_stats = process_seqs.fetch_assembly_ids_and_stats()
-        self.assertGreaterEqual(len(ids_and_stats), 6530) # number of results as of June 21, 2015                                                 
-        self.assertIn('285498', ids_and_stats) #yeast
-        self.assertEqual(ids_and_stats['285498']['num_sequences'], 17)
-        self.assertEqual(ids_and_stats['285498']['sequence_length'], 12157105) 
-        self.assertIn('320101', ids_and_stats) #human
-        self.assertEqual(ids_and_stats['320101']['num_sequences'], 25)
-        self.assertEqual(ids_and_stats['320101']['sequence_length'], 3226010022)
-        self.assertIn('237408', ids_and_stats) #arabidopsis
-        self.assertEqual(ids_and_stats['237408']['num_sequences'], 7)
-        self.assertEqual(ids_and_stats['237408']['sequence_length'], 119667750)
-        self.assertIn('202931', ids_and_stats) #drosophila
-        self.assertEqual(ids_and_stats['202931']['num_sequences'], 8)
-        self.assertEqual(ids_and_stats['202931']['sequence_length'], 143726002)
-        self.assertIn('266321', ids_and_stats) #hiv
-        self.assertEqual(ids_and_stats['266321']['num_sequences'], 1)
-        self.assertEqual(ids_and_stats['266321']['sequence_length'], 9181)
+        ids = process_seqs.fetch_assembly_ids()
+        self.assertGreaterEqual(len(ids), 6530) # number of results as of June 21, 2015                                                 
+        self.assertIn('285498', ids) #yeast
+        self.assertIn('320101', ids) #human
+        self.assertIn('237408', ids) #arabidopsis
+        self.assertIn('202931', ids) #drosophila
+        self.assertIn('266321', ids) #hiv
 
     #@unittest.skip("skipping")
     def test_fetch_nucleotide_sequence_ids(self):
@@ -82,19 +72,19 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
         pool = threadpool.ThreadPool(1)
 
-        ids_and_stats = []
+        ids = []
         try:
-            ids_and_stats = process_seqs.fetch_assembly_ids_and_stats(batch_size)
+            ids = process_seqs.fetch_assembly_ids(batch_size)
         except Exception as inst:
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
 
 
-        classifications = process_seqs.fetch_classifications(ids_and_stats.keys()[:6])
+        classifications = process_seqs.fetch_classifications(ids[:6])
         # get the asids that have classifications and ignore rest
         asids = classifications.keys()
     
         for ncbi_asid in asids:
-            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_asid, ids_and_stats[ncbi_asid], classifications, seq_format, db_dir, True, 0, 2])
+            request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_asid, classifications, seq_format, db_dir, True, 0, 2])
             pool.putRequest(request)
 
         pool.wait()

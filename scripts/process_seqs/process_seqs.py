@@ -48,7 +48,7 @@ def fetch_classifications(assembly_ids, batch_size=20):
     return d
 
 
-def fetch_assembly_ids_and_stats(batch_size=20):
+def fetch_assembly_ids(batch_size=20):
     if batch_size < 20:
         batch_size = 20
     assembly_ids = []
@@ -58,19 +58,13 @@ def fetch_assembly_ids_and_stats(batch_size=20):
     webenv = results["WebEnv"]
     query_key = results["QueryKey"]
     count = int(results["Count"])
-    d = {}
+    data = []
     for start in range(0,count,batch_size):
-        handle = Entrez.esummary(db="assembly", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
-        data = Entrez.read(handle,validate=False)
+        handle = Entrez.efetch(db="assembly", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
+        data.extend(Entrez.read(handle,validate=False))
         handle.close()
-        for assembly in data['DocumentSummarySet']['DocumentSummary']:
-            assembly_uid = assembly.attributes['uid']
-            if not assembly_uid in d:
-                d[assembly_uid] = {}
-                soup = BeautifulSoup(assembly['Meta'])
-                d[assembly_uid]["sequence_length"] = int(soup.find(category="total_length").text)
-                d[assembly_uid]["num_sequences"] = int(soup.find(category="replicon_count").text)
-    return d
+
+    return data
 
 
 def fetch_link_ids(lookup_ids, from_db, to_db, linkname=None, split_size=20):
@@ -105,23 +99,19 @@ def get_sequence_from_refseq(file_handle, accession, db_dir):
     except Exception as inst:
         return False
 
-def verify_genome(d, ncbi_asid, stats):
+def verify_genome(d, ncbi_asid, num_sequences):
     count = 0
     seq_length = 0
     fasta_handle = gzip.open("%s/%s.fasta.gz" % (ncbi_asid, ncbi_asid), 'rb')
     for record in SeqIO.parse(fasta_handle, "fasta"):
         count = count+1
-        seq_length = seq_length + len(record)
     
-    if count != stats['num_sequences']:
-        print "Sequence count does not match for BioProjectID %s (my count: %d, actual: %d)" % (ncbi_asid, count, stats['num_sequences'])
-
-    if abs(seq_length - stats['sequence_length']) / float(stats['sequence_length']) > 0.1:
-        print "Sequence length difference is above 10 pct threshold (%d, %d) for BioProjectID %s" % (seq_length, stats['sequence_length'], ncbi_asid)
+    if count != num_sequences:
+        sys.stderr.write("Sequence count does not match for Assembly ID %s (my count: %d, actual: %d)\n" % (ncbi_asid, count, num_sequences))
         
     fasta_handle.close()
 
-def process_genomes(base, ncbi_asid, stats, classifications, seq_format, db_dir, check_refseq=True, retry=0, max_retry=2):
+def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_refseq=True, retry=0, max_retry=2):
     d = base + ncbi_asid    
     if retry > max_retry:
         sys.stderr.write("!%s!: Could not obtain sequences\n" % ncbi_asid)
@@ -129,8 +119,9 @@ def process_genomes(base, ncbi_asid, stats, classifications, seq_format, db_dir,
         return
 
     if retry > 0:
-        sys.stderr.write("Retrying %s\n" % ncbi_asid)
-        
+        sys.stdout.write("Retrying %s\n" % ncbi_asid)
+    else:
+        sys.stdout.write("Processing %s\n" % ncbi_asid)    
     try:
         os.makedirs(d)
     except OSError:
@@ -171,7 +162,7 @@ def process_genomes(base, ncbi_asid, stats, classifications, seq_format, db_dir,
                 fasta_handle.write(handle.read())
                 handle.close()
         fasta_handle.close()
-        verify_genome(d, ncbi_asid, stats)
+        verify_genome(d, ncbi_asid, len(nuccore_ids))
     except (urllib2.HTTPError, AttributeError):
         #if we have a HTTPError or AttributeError, retry
         fasta_file = "%s/%s.fasta.gz" % (d, ncbi_asid)
@@ -180,15 +171,15 @@ def process_genomes(base, ncbi_asid, stats, classifications, seq_format, db_dir,
             os.remove(fasta_file)
  
         process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_refseq, retry+1, max_retry)
-    #except Exception as inst:
-    #    sys.stderr.write("!%s!:%s\n" % (ncbi_asid, type(inst)))
+    except Exception as inst:
+        sys.stderr.write("!%s!:%s\n" % (ncbi_asid, type(inst)))
         
             
 def main():
     parser = argparse.ArgumentParser(description='Process sequences for KMerge')
     parser.add_argument('-d', '--dir', metavar='OUTPUT', default=os.getcwd(), help='location to write output files')
     parser.add_argument('-b', '--db_dir', metavar='DB_DIR', default=os.getcwd(), help='location of refseq genomic database')
-    parser.add_argument('-f', '--format', metavar='FORMAT', default='fastq', help='format of input file', choices=['fasta', 'fastq', 'fastq-solexa'])
+    parser.add_argument('-f', '--format', metavar='FORMAT', default='fasta', help='format of input file', choices=['fasta', 'fastq', 'fastq-solexa'])
     parser.add_argument('-t', '--num_threads', metavar='NUM THREADS', default=1, type=int, help='specify number of threads to use')
     parser.add_argument('-r', '--max_retry', metavar='MAX_RETRY', default=2, help='max number of times to retry genome download on http error')
     parser.add_argument('-e', '--email', metavar='EMAIL', help='email address to use for Entrez API queries')
@@ -203,26 +194,24 @@ def main():
     seq_format = "fasta"
 
     pool = threadpool.ThreadPool(args.num_threads)
-        
-    asids = []
+
+    ids = []
     try:
-        asids = fetch_non_assembly_ids(batch_size)
+        ids = fetch_assembly_ids(batch_size)
     except Exception as inst:
-        sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
-        sys.exit()
-
-
-        
-    asids = list(set(asids))
+        sys.stderr.write("Error obtaining assembly ids\n")
     
-    classifications = fetch_classifications(asids)
-    stats = fetch_sequence_stats(asids)
-    # get the pjids that have classifications and ignore rest
-    asids = [id for id, c in classifications.iteritems() if c != None]
 
+    classifications = fetch_classifications(ids)
+    # get the asids that have classifications and ignore rest
+    asids = classifications.keys()
+
+    sys.stdout.write("%s genomes will be processed\n" % len(asids))
+    
     for ncbi_asid in asids:
         request = threadpool.WorkRequest(process_genomes, args=[base, ncbi_asid, classifications, seq_format, args.db_dir, True, 0, args.max_retry])
-        pool.putRequest(request) 
+        pool.putRequest(request)
+                                                                                                                     
             
     pool.wait()
 
