@@ -52,7 +52,7 @@ def fetch_assembly_ids(batch_size=20):
     if batch_size < 20:
         batch_size = 20
     assembly_ids = []
-    handle = Entrez.esearch(db="assembly", term='("Complete Genome"[ASLV] OR chromosome[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT replaced[Property] NOT suppressed_refseq[Property]', usehistory="y")
+    handle = Entrez.esearch(db="assembly", term='("Complete Genome"[ASLV] OR "Chromosome"[ASLV] OR "Gapless Chromosome"[ASLV] OR "Chromosome with gaps"[ASLV]) AND full-genome-representation[Property] AND assembly_nuccore_refseq[FILT] AND (latest[Property] OR latest_refseq[Property] OR latest_genbank[Property]) NOT replaced[Property] NOT suppressed_refseq[Property] AND (txid2[Organism:exp] OR txid2759[Organism:exp] OR txid2157[Organism:exp] OR txid35237[Organism:exp] OR txid29258[Organism:exp])', usehistory="y")
     results = Entrez.read(handle)
     handle.close()
     webenv = results["WebEnv"]
@@ -107,7 +107,7 @@ def verify_genome(d, ncbi_asid, num_sequences):
         count = count+1
     
     if count != num_sequences:
-        sys.stderr.write("Sequence count does not match for Assembly ID %s (my count: %d, actual: %d)\n" % (ncbi_asid, count, num_sequences))
+        sys.stderr.write("!%s!: Sequence count does not match for Assembly ID %s (my count: %d, actual: %d)\n" % (ncbi_asid, ncbi_asid, count, num_sequences))
         
     fasta_handle.close()
 
@@ -122,11 +122,7 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
         sys.stdout.write("Retrying %s\n" % ncbi_asid)
     else:
         sys.stdout.write("Processing %s\n" % ncbi_asid)    
-    try:
         os.makedirs(d)
-    except OSError:
-        if not os.path.isdir(d):
-            raise
 
     try:
         handle = Entrez.elink(dbfrom="assembly", db="nucleotide", id=[ncbi_asid], linkname="assembly_nuccore_refseq")
@@ -150,20 +146,28 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
         get_taxonomy(d, ncbi_asid, classifications)
         fasta_handle = gzip.open("%s/%s.fasta.gz" % (d, ncbi_asid), 'wb')
         seq_count = 0
+        seqs_not_found = []
         if check_refseq:
             for acc in [line for line in results.split("\n") if line != '']:
                 if get_sequence_from_refseq(fasta_handle, acc, db_dir):
                     seq_count = seq_count + 1
         check_refseq = False
-        # try to download sequences if no sequences found from local database
-        if not seq_count:
+        # try to download sequences if not all sequences found from local database
+        if seq_count != len(nuccore_ids):
+            # reduce batch size
+            batch_size = 10
+            # move back to the beginning of the file for writing
+            fasta_handle.seek(0)
+            sys.stdout.write("Attempting to download sequences for %s\n" % ncbi_asid)
             for start in range(0, len(nuccore_ids), batch_size):
                 handle = Entrez.efetch(db="nuccore", retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key, rettype=seq_format)
                 fasta_handle.write(handle.read())
                 handle.close()
+            sys.stdout.write("Finished downloading sequences for %s\n" % ncbi_asid)
         fasta_handle.close()
         verify_genome(d, ncbi_asid, len(nuccore_ids))
-    except (urllib2.HTTPError, AttributeError):
+    except (urllib2.HTTPError, AttributeError) as e:
+        sys.stdout.write("Retrying %s due to error: %s" % (ncbi_asid, str(e)))
         #if we have a HTTPError or AttributeError, retry
         fasta_file = "%s/%s.fasta.gz" % (d, ncbi_asid)
         if os.path.isfile(fasta_file):
@@ -172,7 +176,7 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
  
         process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_refseq, retry+1, max_retry)
     except Exception as inst:
-        sys.stderr.write("!%s!:%s\n" % (ncbi_asid, type(inst)))
+        sys.stderr.write("!%s!: %s\n" % (ncbi_asid, str(inst)))
         
             
 def main():
@@ -183,6 +187,7 @@ def main():
     parser.add_argument('-t', '--num_threads', metavar='NUM THREADS', default=1, type=int, help='specify number of threads to use')
     parser.add_argument('-r', '--max_retry', metavar='MAX_RETRY', default=2, help='max number of times to retry genome download on http error')
     parser.add_argument('-e', '--email', metavar='EMAIL', help='email address to use for Entrez API queries')
+    parser.add_argument('-i', '--input_file', metavar='INPUT_FILE', default=None, help='location of file of NCBI assembly ids to process')
     args = parser.parse_args()
 
     Entrez.email = args.email
@@ -197,10 +202,14 @@ def main():
 
     ids = []
     try:
-        ids = fetch_assembly_ids(batch_size)
+        if not args.input_file:
+            ids = fetch_assembly_ids(batch_size)
+        else:
+            for line in open(args.input_file).readlines():
+                ids.append(line.strip())
     except Exception as inst:
         sys.stderr.write("Error obtaining assembly ids\n")
-    
+        
 
     classifications = fetch_classifications(ids)
     # get the asids that have classifications and ignore rest
