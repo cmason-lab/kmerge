@@ -19,11 +19,11 @@ def get_taxonomy(d, ncbi_asid, classifications): # will raise KeyError if key no
 def fetch_classifications(assembly_ids, batch_size=20):
     if batch_size < 20:
         batch_size = 20 # minimum size for NCBI records
-    lookup = fetch_link_ids(assembly_ids, "assembly", "taxonomy", None, batch_size)
+    lookup = fetch_link_ids(assembly_ids, "assembly", "taxonomy", "assembly_taxonomy", batch_size)
     tax_ids = [tax_id for sublist in lookup.values() for tax_id in sublist]
     as_ids = [as_id for as_id in lookup.keys()]
-    # reverse lookup keys and values
-    lookup = dict(zip(tax_ids, as_ids))
+    # match assembly ids and taxonomy ids
+    lookup = dict(zip(as_ids, tax_ids))
     post_handle = Entrez.epost(db='taxonomy', id=",".join(tax_ids), usehistory="y")
     results = Entrez.read(post_handle)
     post_handle.close()
@@ -33,7 +33,7 @@ def fetch_classifications(assembly_ids, batch_size=20):
     for start in range(0, len(tax_ids), batch_size):
         fetch_handle = Entrez.efetch(db='taxonomy', retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
         taxonomy_records.extend(Entrez.read(fetch_handle))
-    d = dict.fromkeys(as_ids)
+    taxa = {}
     for record in taxonomy_records:
         bp_taxonomy = {}
         species_found = False
@@ -44,7 +44,10 @@ def fetch_classifications(assembly_ids, batch_size=20):
                 bp_taxonomy[taxon['Rank']] = taxon['ScientificName']
         if not species_found:
             bp_taxonomy[record['Rank']] = record['ScientificName']
-        d[lookup[record['TaxId']]] = bp_taxonomy
+        taxa[record['TaxId']] = bp_taxonomy
+    d = {}
+    for as_id, taxa_id in lookup.iteritems():
+        d[as_id] = taxa[taxa_id]
     return d
 
 
@@ -96,7 +99,7 @@ def get_sequence_from_refseq(file_handle, accession, db_dir):
                               universal_newlines=True, stderr=open(os.devnull, 'w'))
         file_handle.write(output)
         return True
-    except Exception as inst:
+    except Exception as inst:                                        
         return False
 
 def verify_genome(d, ncbi_asid, num_sequences):
@@ -166,9 +169,13 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
             sys.stdout.write("Finished downloading sequences for %s\n" % ncbi_asid)
         fasta_handle.close()
         verify_genome(d, ncbi_asid, len(nuccore_ids))
-    except (urllib2.HTTPError, AttributeError) as e:
-        sys.stdout.write("Retrying %s due to error: %s" % (ncbi_asid, str(e)))
-        #if we have a HTTPError or AttributeError, retry
+    except (urllib2.HTTPError, AttributeError, IndexError) as e:
+        exc_type = sys.exc_info()[0]
+        exc_obj = sys.exc_info()[1]
+        exc_tb = sys.exc_info()[2]
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        sys.stdout.write("Retrying %s due to error: %s, %s, %s" % (ncbi_asid, exc_type, fname, exc_tb.tb_lineno))
+        #if we have a HTTPError or AttributeError or IndexError, retry
         fasta_file = "%s/%s.fasta.gz" % (d, ncbi_asid)
         if os.path.isfile(fasta_file):
             fasta_handle.close()
@@ -176,7 +183,12 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
  
         process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_refseq, retry+1, max_retry)
     except Exception as inst:
-        sys.stderr.write("!%s!: %s\n" % (ncbi_asid, str(inst)))
+        exc_type = sys.exc_info()[0]
+        exc_obj = sys.exc_info()[1]
+        exc_tb = sys.exc_info()[2]
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                        
+        sys.stderr.write("!%s!: %s, %s, %s\n" % (ncbi_asid, exc_type, fname, exc_tb.tb_lineno))
         
             
 def main():

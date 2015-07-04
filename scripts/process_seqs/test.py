@@ -14,12 +14,12 @@ class TestDownloadFastaFunctions(unittest.TestCase):
     def setUp(self):
         Entrez.email = 'dar326@cornell.edu'
 
-    @unittest.skip("skipping")
+    #@unittest.skip("skipping")
     def test_fetch_assembly_ids(self):
         ids = process_seqs.fetch_assembly_ids()
         self.assertGreaterEqual(len(ids), 6530) # number of results as of June 21, 2015                                                 
         self.assertIn('285498', ids) #yeast
-        self.assertIn('320101', ids) #human
+        #self.assertIn('320101', ids) #human
         self.assertIn('237408', ids) #arabidopsis
         self.assertIn('202931', ids) #drosophila
         self.assertIn('253201', ids) #hpv
