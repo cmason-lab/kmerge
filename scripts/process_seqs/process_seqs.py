@@ -12,9 +12,10 @@ from Bio import SeqIO
 def get_taxonomy(d, ncbi_asid, classifications): # will raise KeyError if key not present
     tax_record = classifications[ncbi_asid]
     tax_file = open("%s/taxonomy.txt" % d, 'w')
-    for rank, name in tax_record.iteritems():
-        tax_file.write("%s\t%s\n" % (rank, name))
+    for rank, label in tax_record.iteritems():
+        tax_file.write("%s\t%s\n" % (rank, label))
     tax_file.close()
+
 
 def fetch_classifications(assembly_ids, batch_size=20):
     if batch_size < 20:
@@ -33,23 +34,32 @@ def fetch_classifications(assembly_ids, batch_size=20):
     for start in range(0, len(tax_ids), batch_size):
         fetch_handle = Entrez.efetch(db='taxonomy', retstart=start, retmax=batch_size, webenv=webenv, query_key=query_key)
         taxonomy_records.extend(Entrez.read(fetch_handle))
+
     taxa = {}
+        
     for record in taxonomy_records:
-        bp_taxonomy = {}
+        as_taxonomy = {}
         species_found = False
         for taxon in record['LineageEx']:
-            if('Rank' in taxon and (taxon['Rank'] != 'no rank')):
+            if 'Rank' in taxon and taxon['Rank'] != 'no rank':
                 if taxon['Rank'] == 'species':
                     species_found = True
-                bp_taxonomy[taxon['Rank']] = taxon['ScientificName']
-        if not species_found:
-            bp_taxonomy[record['Rank']] = record['ScientificName']
-        taxa[record['TaxId']] = bp_taxonomy
-    d = {}
+                as_taxonomy[taxon['Rank']] = taxon['ScientificName']
+                
+        if record['Rank'] == 'no rank':
+            as_taxonomy['strain'] = record['ScientificName']
+        elif not species_found:
+            # I believe this is to handle virus taxonomy (need to check)
+            as_taxonomy[record['Rank']] = record['ScientificName']
+                                                            
+        taxa[record['TaxId']] = as_taxonomy
+
+    # assembly ids that don't have corresponding taxonomy info will be flagged later and require re-running of pipeline    
+    d = dict.fromkeys(as_ids)
     for as_id, taxa_id in lookup.iteritems():
         d[as_id] = taxa[taxa_id]
     return d
-
+                                                                                                                                                                                                                                                            
 
 def fetch_assembly_ids(batch_size=20):
     if batch_size < 20:
@@ -69,7 +79,16 @@ def fetch_assembly_ids(batch_size=20):
 
     return data
 
-
+def fetch_link_ids2(lookup_ids, from_db, to_db, linkname, split_size=20):
+    post_handle = Entrez.epost(db=from_db, id=",".join(lookup_ids), usehistory="y")
+    results = Entrez.read(post_handle)
+    post_handle.close()
+    handle = Entrez.elink(dbfrom=from_db, db=to_db, linkname=linkname, webenv=results["WebEnv"], query_key=results["QueryKey"])
+    results = Entrez.read(handle)
+    handle.close()
+    # combine input and link ids and return dictionary
+    return dict(zip(results[0]["IdList"], [ record["Id"] for record in results[0]["LinkSetDb"][0]["Link"] ]))
+                                                                                                                                                                                    
 def fetch_link_ids(lookup_ids, from_db, to_db, linkname=None, split_size=20):
     if split_size < 20:
         split_size = 20
@@ -90,8 +109,9 @@ def fetch_link_ids(lookup_ids, from_db, to_db, linkname=None, split_size=20):
         to_list = elem['LinkSetDb'][0]['Link']
         to_ids = [ rec['Id'] for rec in to_list]
         id_map[from_id] = to_ids
-
+        
     return id_map
+        
 
 def get_sequence_from_refseq(file_handle, accession, db_dir):
     try:
@@ -169,7 +189,7 @@ def process_genomes(base, ncbi_asid, classifications, seq_format, db_dir, check_
             sys.stdout.write("Finished downloading sequences for %s\n" % ncbi_asid)
         fasta_handle.close()
         verify_genome(d, ncbi_asid, len(nuccore_ids))
-    except (urllib2.HTTPError, AttributeError, IndexError) as e:
+    except (urllib2.HTTPError, AttributeError, IndexError, IOError) as e:
         exc_type = sys.exc_info()[0]
         exc_obj = sys.exc_info()[1]
         exc_tb = sys.exc_info()[2]

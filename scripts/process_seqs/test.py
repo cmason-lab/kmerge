@@ -8,6 +8,7 @@ import gzip
 from subprocess32 import check_output, CalledProcessError
 import shutil
 import threadpool
+import time
 
 class TestDownloadFastaFunctions(unittest.TestCase):
     
@@ -79,9 +80,11 @@ class TestDownloadFastaFunctions(unittest.TestCase):
             sys.stderr.write("Error converting non-virus assembly ids to bioproject ids\n")
 
 
-        classifications = process_seqs.fetch_classifications(ids[:6])
+        classifications = process_seqs.fetch_classifications(ids[:30])
+
+        self.assertEqual(len(classifications), 30)
         # get the asids that have classifications and ignore rest
-        asids = classifications.keys()
+        asids = classifications.keys()[:6]
     
         for ncbi_asid in asids:
             request = threadpool.WorkRequest(process_seqs.process_genomes, args=[base, ncbi_asid, classifications, seq_format, db_dir, True, 0, 2])
@@ -93,9 +96,9 @@ class TestDownloadFastaFunctions(unittest.TestCase):
 
     #@unittest.skip("skipping")
     def test_get_taxonomy(self):
-        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438','587648','110928',
-                                                    '31388', '407318', '48671', '360488', '445688', '46691']
-        classifications = process_seqs.fetch_classifications(assembly_ids)
+        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438',
+                        '587648','110928','52131', '31388', '407318', '48671', '360488', '445688', '46691', '253201']
+        classifications = process_seqs.fetch_classifications(assembly_ids, 30)
         process_seqs.get_taxonomy(os.getcwd(), '315421', classifications)
         self.assertTrue(os.path.isfile('taxonomy.txt'))
         d = {}
@@ -103,6 +106,7 @@ class TestDownloadFastaFunctions(unittest.TestCase):
             for line in f:
                 (key, val) = line.strip().split("\t")
                 d[key] = val
+
         self.assertEqual(len(d), 13)
         self.assertEqual(d['superkingdom'], 'Eukaryota')
         self.assertEqual(d['kingdom'], 'Metazoa')
@@ -120,15 +124,42 @@ class TestDownloadFastaFunctions(unittest.TestCase):
         os.remove('taxonomy.txt')
         self.assertFalse(os.path.isfile('taxonomy.txt'))
 
+        process_seqs.get_taxonomy(os.getcwd(), '52131', classifications)
+        self.assertTrue(os.path.isfile('taxonomy.txt'))
+        d = {}
+        with open("taxonomy.txt") as f:
+            for line in f:
+                (key, val) = line.strip().split("\t")
+                d[key] = val
+                
+        self.assertEqual(d['strain'], 'Mycobacterium tuberculosis PanR0707')                                                                     
+        os.remove('taxonomy.txt')
+        self.assertFalse(os.path.isfile('taxonomy.txt'))
+        
+        process_seqs.get_taxonomy(os.getcwd(), '253201', classifications)
+        self.assertTrue(os.path.isfile('taxonomy.txt'))
+        d = {}
+        with open("taxonomy.txt") as f:
+            for line in f:
+                (key, val) = line.strip().split("\t")
+                d[key] = val
+    
+        self.assertEqual(d['strain'], 'Human papillomavirus type 60')
+        os.remove('taxonomy.txt')
+        self.assertFalse(os.path.isfile('taxonomy.txt'))
+                                                                                                            
+        
     #@unittest.skip("skipping")
-    def test_genome_to_taxonomy(self):
-        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438','587648','110928',
-                          '31388', '407318', '48671', '360488', '445688', '46691']
+    def test_assembly_to_taxonomy(self):
+        assembly_ids = ['315421','284548','375868','587628', '196698','39508','253601','376268','587928','110908','44548','253171','380438',
+                        '587648','110928', '31388', '407318', '48671', '360488', '445688', '46691']
 
         d = process_seqs.fetch_classifications(assembly_ids)
-        self.assertEqual(len(assembly_ids), len(d))
+        missing = set(assembly_ids) - set(d.keys())
+        self.assertEqual(len(missing), 0)
         for bp, taxonomy in d.iteritems():
             self.assertTrue('species' in taxonomy)
-        
+
+            
 if __name__ == '__main__':
     unittest.main()
