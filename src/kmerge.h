@@ -18,7 +18,7 @@ using namespace std;
 
 typedef dlib::compress_stream::kernel_3b cs;
 
-enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY };
+enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY, PEARSON};
 
 typedef unsigned int uint;
 

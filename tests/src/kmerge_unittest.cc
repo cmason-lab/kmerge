@@ -959,6 +959,21 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
+
+  params.kmerge = new KMerge("pearson", ".", "./reference");
+  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
+  REQUIRE(success == true);
+
+
+  for(auto m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
+    // make sure we are getting unsigned 8-bit integers back
+    REQUIRE(m_iter->first >= 0);
+    REQUIRE(m_iter->second <= 255);
+  }
+  hashed_counts.clear();
+  delete params.kmerge;
+
+
 }
 
 

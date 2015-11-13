@@ -2,6 +2,7 @@
 #include "lookup3.c"
 #include "MurmurHash3.h"
 #include "city.h"
+#include "hash.h"
 #include <dlib/serialize.h>
 #include <fstream>
 #include <unistd.h>
@@ -21,6 +22,8 @@ KMerge::KMerge (const std::string& hash_func, const std::string& dir, const std:
     this->hash_type = MURMUR;
   } else if (hash_func == "city") {
     this->hash_type = CITY;
+  } else if (hash_func == "pearson") {
+    this->hash_type = PEARSON;
   } else {
     throw "Invalid hash function provided";
   }
@@ -70,6 +73,8 @@ uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
     return out;
   case CITY:
     return(CityHash32(combine.c_str(), combine.length()));
+  case PEARSON:
+    return(hash_pFastVLTS_8b((uint8_t *) combine.c_str(), combine.length()));
   default:
     throw "Invalid hash function provided";
   }
