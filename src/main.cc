@@ -15,6 +15,7 @@ int main(int argc, char const ** argv) {
   parser.add_option("d", "Location of sequences and taxonomy directories", 1);
   parser.add_option("i", "Location of single sequence file", 1);
   parser.add_option("o", "Location to write output files (must already exist)", 1);
+  parser.add_option("u", "Truncated hash value in bits (8 or 16)", 1);
   parser.add_option("t", "Max number of threads to use for worker and hash threads", 2);
   parser.add_option("f", "Hash function to use for k-mers", 1);
   parser.add_option("h","Display this help message.");
@@ -28,7 +29,7 @@ int main(int argc, char const ** argv) {
     return 0;
   }
   //Ensure options only defined once
-  const char* one_time_opts[] = {"k", "d", "i", "o", "t", "f", "h"};
+  const char* one_time_opts[] = {"k", "d", "i", "o", "u", "t", "f", "h"};
   parser.check_one_time_options(one_time_opts);
 
   //Check only one of d and i options given
@@ -39,7 +40,7 @@ int main(int argc, char const ** argv) {
   // check if the -h option was given on the command line
   if (parser.option("h")) {
     // display all the command line options
-    std::cout << "Usage: kmerge -k k_start k_end (-d|-i|-o|-t|-f)" << std::endl;
+    std::cout << "Usage: kmerge -k k_start k_end (-d|-i|-o|-u|-t|-f)" << std::endl;
     parser.print_options(); 
     return 0;
   }
@@ -55,7 +56,7 @@ int main(int argc, char const ** argv) {
   uint k_val_start = 0;
   uint k_val_end = 0;
   std::string seq_dir("./"), hash_func("lookup3"), in_file, out_dir("./reference");
-  uint work_threads = 1, hash_threads = 1;
+  uint work_threads = 1, hash_threads = 1, trunc_mode=0;
 
   k_val_start = atoi(parser.option("k").argument(0).c_str());
   k_val_end = atoi(parser.option("k").argument(1).c_str());
@@ -75,6 +76,12 @@ int main(int argc, char const ** argv) {
   } 
   if (parser.option("o")) {
     out_dir = parser.option("o").argument();
+  }
+  if (parser.option("u")) {
+    trunc_mode = atoi(parser.option("u").argument().c_str());
+    if (trunc_mode != 8 and trunc_mode != 16) {
+      std::cerr << "Error in command line:\n   Hash truncation value must be 8 or 16." << std::endl;
+    }
   }
   if (parser.option("t")) {
     // make sure two values input to t
@@ -107,7 +114,7 @@ int main(int argc, char const ** argv) {
 
   if (parser.option("i")) {
     try {
-      kmerge = new KMerge(hash_func, "", out_dir);
+      kmerge = new KMerge(hash_func, "", out_dir, trunc_mode);
       param_struct params;
       params.kmerge = kmerge;
       params.k_val_start = k_val_start;
@@ -131,7 +138,7 @@ int main(int argc, char const ** argv) {
     DIR *dirp;
     struct dirent *dp;
     dirp = opendir(seq_dir.c_str());
-    kmerge = new KMerge(hash_func, seq_dir, out_dir);
+    kmerge = new KMerge(hash_func, seq_dir, out_dir, trunc_mode);
     while ((dp = readdir(dirp)) != NULL) {
       if(stat(dp->d_name, &st) == 0) {
 	if (S_ISDIR(st.st_mode)) {

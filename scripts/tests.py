@@ -21,6 +21,10 @@ from gensim.corpora.dictionary import Dictionary
 import itertools
 from Bio.Seq import Seq
 import pyhash
+import pandas as pd
+from scipy.sparse import csr_matrix
+from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
@@ -109,7 +113,7 @@ class FunctionalGroupTest(unittest.TestCase):
         model = models.ldamulticore.LdaMulticore(this.k_corpus, num_topics=int(num_topics), workers=this.t)
         return model.top_topics(this.k_corpus, num_words=20)
         
-    def test_lda_model(self):
+    def test_hdp_model(self):
         #params = {"num_topics": [50,500]}
         #cv_f = optunity.cross_validated(x=np.array(range(len(self.groups))), y=np.array(range(len(self.groups))), num_folds=10, regenerate_folds=True)(self.evaluate)
         #optimal_configuration, info, _ = optunity.maximize(self.evaluate, 30, **params)
@@ -126,6 +130,23 @@ class FunctionalGroupTest(unittest.TestCase):
         
         print "Done"
 
+    def test_distributed_lda_model(self):
+        print "Building model"
+        # 482 reference pathway maps as of 12/17/2015
+        model = models.ldamodel.LdaModel(self.k_corpus, num_topics=482, passes=100, distributed=True)
+        model.save("kmer_lda.k%s" % self.ks, ignore=['corpus'])
+        print "Done"
+
+    def test_lda_model(self):
+        print "Building model"
+        # 482 reference pathway maps as of 12/17/2015
+        model = models.ldamodel.LdaModel(self.k_corpus, num_topics=482, passes=5)
+        del model.corpus
+        model.save("kmer_lda.k%s" % self.ks)
+        print "Done"
+
+        
+        
 class PrepareKMerTopicsForAssemblyTest(unittest.TestCase):
 
     def setup_method(self, method):
@@ -136,24 +157,42 @@ class PrepareKMerTopicsForAssemblyTest(unittest.TestCase):
         self.t = pytest.config.getoption('t')
         
     def test_functionality(self):
+        model = models.hdpmodel.HdpModel.load("kmer_hdp.k11")
+        encoder = pickle.load(open("encoder.k%s.pkl" % self.ks, "rb"))
         bases=['A','T','G','C']
         kmers=[''.join(p) for p in itertools.product(bases, repeat=self.ks)]
+        
         hasher = pyhash.murmur3_32()
         kmer_map = {}
         for kmer in kmers:
             rc_kmer = str(Seq(kmer).reverse_complement())
             combine = ""
             if kmer < rc_kmer:
-                if kmer in kmer_map:
-                    continue
                 combine = kmer + rc_kmer
             else:
-                if rc_kmer in kmer_map:
-                    continue
                 combine = rc_kmer + kmer
-                                                                                                
-            kmer_map[kmer if kmer < rc_kmer else rc_kmer] = hasher(combine)
+            kmer_map.setdefault(hasher(combine), set())
+            kmer_map[hasher(combine)].add(kmer if kmer < rc_kmer else rc_kmer)
 
-
-
+            
+            
         # determine probability cutoff for including kmer in topic
+        df = pd.DataFrame([{k:v for k,v in topic[1]} for topic in model.show_topics(topics=-1, topn=-1, formatted=False)])
+        # get top 25 percent of kmers
+        qt = df.quantile(q=0.25, axis=1)
+        # replace this with whatever cutoff is chosen
+        df = df.apply(lambda row: row.where(row >= qt[int(row.name)]), axis=1)
+        df.fillna(0, inplace=True)
+        topics = csr_matrix(df)
+
+        for row in xrange(topics.shape[0]):
+            sequences = []
+            output_handle = open("assemble/hdp_k11/topic_%s.fasta" % row, "w")
+            for col in topics[row,:].nonzero()[1]:
+                k_idx = encoder.inverse_transform(int(df.columns.values[col]))
+                for i, kmer in enumerate(kmer_map[k_idx]):
+                    # create k-mer twice for velvet
+                    sequences.append(SeqRecord(Seq(kmer),id='%s_%s' % (k_idx,i), name='', description=''))
+            SeqIO.write(sequences, output_handle, "fasta")
+            output_handle.close()
+        

@@ -18,7 +18,8 @@ using namespace std;
 
 typedef dlib::compress_stream::kernel_3b cs;
 
-enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY, PEARSON};
+enum HashEnumType { LOOKUP3, SPOOKY, MURMUR, CITY};
+enum TruncType { BITS_8, BITS_16, BITS_32 };
 
 typedef unsigned int uint;
 
@@ -34,12 +35,13 @@ struct param_struct {
   std::string hashes_filename;
   std::string counts_filename;
   bool is_ref;
-} ;
+};
 
 
 class KMerge {
  private:
   HashEnumType hash_type;
+  TruncType trunc_type;
   std::string dir;
   std::string out_dir;
   dlib::logger dlog;
@@ -47,10 +49,10 @@ class KMerge {
 
  public:
 
-  KMerge(const std::string&, const std::string&, const std::string&);
+  KMerge(const std::string&, const std::string&, const std::string&, const uint);
   ~KMerge();
   static std::string rev_comp(const std::string&);
-  static uint hash_kmer(const std::string&, const HashEnumType);
+  static uint hash_kmer(const std::string&, const HashEnumType, const TruncType);
   bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool, bool);
   bool hash_seq(std::string&, uint, btree::btree_map<uint, uint>&, std::mutex&);
   bool add_dataset(const std::vector<uint>&, const std::string&);

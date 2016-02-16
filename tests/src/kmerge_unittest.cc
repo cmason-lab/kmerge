@@ -11,6 +11,45 @@
 #include <iomanip>
 #include <sys/stat.h>
 
+TEST_CASE("GenerateTruncatedHashes", "[KmerGenerator]") {
+  std::set<uint> murmur_set;
+  int i, k=7;
+  unsigned long long x, y;
+  uint bits = 8;
+  
+  std::string kmer;
+  uint count = 0;
+  
+  for (x = 0; x < 1ULL<<(2*k); ++x) {
+    for (i = 0, y = x; i < k; ++i, y >>= 2)
+      kmer.push_back("ACGT"[y&3]);
+    count++;
+    murmur_set.insert((uint8_t) KMerge::hash_kmer(kmer, MURMUR, BITS_8));
+    kmer.clear();
+  }
+  
+  REQUIRE(pow(4,k) == count);
+  REQUIRE(pow(2,bits) >= murmur_set.size());
+
+  murmur_set.clear();
+  k=9;
+  bits = 16;
+  count = 0;
+
+  for (x = 0; x < 1ULL<<(2*k); ++x) {
+    for (i = 0, y = x; i < k; ++i, y >>= 2)
+      kmer.push_back("ACGT"[y&3]);
+    count++;
+    murmur_set.insert((uint16_t) KMerge::hash_kmer(kmer, MURMUR, BITS_16));
+    kmer.clear();
+  }
+
+  REQUIRE(pow(4,k) == count);
+  REQUIRE(pow(2,bits) >= murmur_set.size());
+
+}
+
+
 
 TEST_CASE("GenerateAllKMersOfGivenLength", "[KmerGenerator]") {
   std::set<uint> lookup3_set, city_set, murmur_set;
@@ -24,9 +63,9 @@ TEST_CASE("GenerateAllKMersOfGivenLength", "[KmerGenerator]") {
     for (i = 0, y = x; i < k; ++i, y >>= 2)
       kmer.push_back("ACGT"[y&3]);
     count++;
-    lookup3_set.insert(KMerge::hash_kmer(kmer, LOOKUP3));
-    city_set.insert(KMerge::hash_kmer(kmer, MURMUR));
-    murmur_set.insert(KMerge::hash_kmer(kmer, CITY));
+    lookup3_set.insert(KMerge::hash_kmer(kmer, LOOKUP3, BITS_32));
+    city_set.insert(KMerge::hash_kmer(kmer, MURMUR, BITS_32));
+    murmur_set.insert(KMerge::hash_kmer(kmer, CITY, BITS_32));
     kmer.clear();
   }
   
@@ -188,7 +227,7 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k5.txt");
   files.push_back("/home/darryl/Development/kmerge/tests/208831/sample.k7.txt");
 
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
   params.kmerge = kmerge;
  
@@ -259,7 +298,7 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
   files.push_back("/home/darryl/Development/kmerge/tests/sample/sample.k7.txt");
 
 
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
   params.kmerge = kmerge;
 
@@ -324,7 +363,7 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
   params.group_name = "208831";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
   params.kmerge = kmerge;
 
  
@@ -400,7 +439,7 @@ TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
   params.group_name = "sample";
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
 
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
   params.kmerge = kmerge;
 
 
@@ -483,7 +522,7 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.is_ref = true;
 
-  KMerge* kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge* kmerge = new KMerge("lookup3", ".", "./reference", 0);
   params.kmerge = kmerge;
   
   KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
@@ -542,7 +581,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.is_ref = false;
 
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
   params.kmerge = kmerge;
 
@@ -640,7 +679,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
 
 
-  KMerge* kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge* kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
   params1.kmerge = kmerge;
   params2.kmerge = kmerge;
@@ -688,17 +727,17 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   kmer2_count = 10775 /*GCGAT*/ + 10855 /*ATCGC*/;
 
   for (pos = 0; pos < 512 /*3^5*/; pos++) {
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32)) {
       kmer1_pos = pos;
     }
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32)) {
       kmer2_pos = pos;
     }
   }
 
 
-  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
+  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32));
+  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32));
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
@@ -761,16 +800,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
   }
 
   for (pos = 0; pos < 512 /*3^5*/; pos++) {
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32)) {
       kmer1_pos = pos;
     }
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32)) {
       kmer2_pos = pos;
     }
   }
 
-  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
+  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32));
+  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32));
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
@@ -833,16 +872,16 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDB", "[HashTest]") {
 
 
   for (pos = 0; pos < 512 /*3^5*/; pos++) {
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32)) {
       kmer1_pos = pos;
     }
-    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3)) {
+    if (hashes_in[pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32)) {
       kmer2_pos = pos;
     }
   }
 
-  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3));
-  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3));
+  REQUIRE(hashes_in[kmer1_pos] == KMerge::hash_kmer(kmer1, LOOKUP3, BITS_32));
+  REQUIRE(hashes_in[kmer2_pos] == KMerge::hash_kmer(kmer2, LOOKUP3, BITS_32));
   REQUIRE(counts_in[kmer1_pos] == kmer1_count);
   REQUIRE(counts_in[kmer2_pos] == kmer2_count);
 
@@ -922,7 +961,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   params.is_ref = true;
 
 
-  params.kmerge = new KMerge("lookup3", ".", "./reference");
+  params.kmerge = new KMerge("lookup3", ".", "./reference", 0);
   bool success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -934,7 +973,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge("spooky", ".", "./reference");
+  params.kmerge = new KMerge("spooky", ".", "./reference", 0);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -946,7 +985,7 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   hashed_counts.clear();
   delete params.kmerge;
 
-  params.kmerge = new KMerge("city", ".", "./reference");
+  params.kmerge = new KMerge("city", ".", "./reference", 0);
   success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
   REQUIRE(success == true);
 
@@ -958,21 +997,6 @@ TEST_CASE("TestHashingFunctions", "[HashTest]") {
   }
   hashed_counts.clear();
   delete params.kmerge;
-
-
-  params.kmerge = new KMerge("pearson", ".", "./reference");
-  success = params.kmerge->count_hashed_kmers(params, hashed_counts, true, true);
-  REQUIRE(success == true);
-
-
-  for(auto m_iter = hashed_counts.begin(); m_iter != hashed_counts.end(); m_iter++) {
-    // make sure we are getting unsigned 8-bit integers back
-    REQUIRE(m_iter->first >= 0);
-    REQUIRE(m_iter->second <= 255);
-  }
-  hashed_counts.clear();
-  delete params.kmerge;
-
 
 }
 
@@ -985,7 +1009,7 @@ TEST_CASE("AddTaxonomyInfoToDB", "[LevelDBTest]") {
 
 
   
-  KMerge *kmerge = new KMerge("lookup3", ".", "./reference");
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
   kmerge->add_taxonomy(group);
 

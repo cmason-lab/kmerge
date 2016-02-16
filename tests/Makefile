@@ -33,7 +33,7 @@ all : $(TESTS)
 clean :
 	rm -f $(TESTS) *.o
 
-kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o hash.o
+kmerge_unittest : kmerge_unittest.o kmerge.o murmur_hash.o spookyV2.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(HOME_DIR)/include/dlib/all/source.cpp $^ -o $@ $(LDFLAGS)
 
 kmerge.o: $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c $(DEVELOPMENT_INCLUDE_DIR)/hash.c
@@ -44,9 +44,6 @@ spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/Spo
 
 murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp -o $@ $(LDFLAGS)
-
-hash.o: $(DEVELOPMENT_INCLUDE_DIR)/hash.h $(DEVELOPMENT_INCLUDE_DIR)/hash.c
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/hash.c -o $@ $(LDFLAGS)
 
 kmerge_unittest.o : $(TEST_INCLUDE_DIR)/kmerge_unittest.cc $(DEVELOPMENT_INCLUDE_DIR)/lookup3.c $(PROGRAM_SRC_DIR)/kmerge.h $(PROGRAM_SRC_DIR)/kmerge.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(TEST_INCLUDE_DIR)/kmerge_unittest.cc -o $@ $(LDFLAGS)

@@ -2,14 +2,13 @@
 #include "lookup3.c"
 #include "MurmurHash3.h"
 #include "city.h"
-#include "hash.h"
 #include <dlib/serialize.h>
 #include <fstream>
 #include <unistd.h>
 
 using namespace std;
 
-KMerge::KMerge (const std::string& hash_func, const std::string& dir, const std::string& out_dir): dlog("kmerge") {
+KMerge::KMerge (const std::string& hash_func, const std::string& dir, const std::string& out_dir, const uint trunc_mode): dlog("kmerge") {
   this->dir = dir;
   this->out_dir = out_dir;
   this->dlog.set_level(dlib::LALL);
@@ -22,10 +21,16 @@ KMerge::KMerge (const std::string& hash_func, const std::string& dir, const std:
     this->hash_type = MURMUR;
   } else if (hash_func == "city") {
     this->hash_type = CITY;
-  } else if (hash_func == "pearson") {
-    this->hash_type = PEARSON;
   } else {
     throw "Invalid hash function provided";
+  }
+
+  if (trunc_mode == 8) {
+    this->trunc_type = BITS_8;
+  } else if (trunc_mode == 16) {
+    this->trunc_type = BITS_16;
+  } else {
+    this->trunc_type = BITS_32;
   }
 
 }
@@ -54,8 +59,9 @@ std::string KMerge::rev_comp(const std::string& input) {
   return output;
 }
 
-uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
+uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type, const TruncType trunc_type) {
   std::string rc_kmer = KMerge::rev_comp(kmer), combine;
+  uint hash_val;
   if (kmer < rc_kmer) {
     combine = kmer + rc_kmer;
   } else {
@@ -64,24 +70,35 @@ uint KMerge::hash_kmer(const std::string& kmer, const HashEnumType hash_type) {
 
   switch (hash_type) {
   case LOOKUP3:
-    return(hashlittle(combine.c_str(), combine.length(), 0));
+    hash_val = hashlittle(combine.c_str(), combine.length(), 0);
+    break;
   case SPOOKY:
-      return(SpookyHash::Hash32(combine.c_str(), combine.length(), 0));
+    hash_val = SpookyHash::Hash32(combine.c_str(), combine.length(), 0);
+    break;
   case MURMUR:
-    uint out;
-    MurmurHash3_x86_32  ( combine.c_str(), combine.length(), 0, &out );
-    return out;
+    MurmurHash3_x86_32  ( combine.c_str(), combine.length(), 0, &hash_val );
+    break;
   case CITY:
-    return(CityHash32(combine.c_str(), combine.length()));
-  case PEARSON:
-    return(hash_pFastVLTS_8b((uint8_t *) combine.c_str(), combine.length()));
+    hash_val = CityHash32(combine.c_str(), combine.length());
+    break;
   default:
     throw "Invalid hash function provided";
+  }
+
+  switch (trunc_type) {
+  case BITS_32:
+    return hash_val;
+  case BITS_16:
+    return (uint16_t) hash_val;
+  case BITS_8:
+    return (uint8_t) hash_val;
+  default:
+    throw "Invalid truncation type provided";
   }
 }
 
 uint KMerge::hash_kmer(const std::string& kmer) {
-  return KMerge::hash_kmer(kmer, this->hash_type);
+  return KMerge::hash_kmer(kmer, this->hash_type, this->trunc_type);
 }
 
 

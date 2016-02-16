@@ -14,7 +14,7 @@ default: all
 all: kmerge
 
 kmerge: main.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) main.o kmerge.o murmur_hash.o spookyV2.o hash.o $(HOME_DIR)/include/dlib/all/source.cpp -o $@ $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) main.o kmerge.o murmur_hash.o spookyV2.o $(HOME_DIR)/include/dlib/all/source.cpp -o $@ $(LDFLAGS)
 
 main.o: kmerge.o $(SRC)/main.cc
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SRC)/main.cc -o $@ $(LDFLAGS)
@@ -27,9 +27,6 @@ spookyV2.o: $(DEVELOPMENT_INCLUDE_DIR)/SpookyV2.h $(DEVELOPMENT_INCLUDE_DIR)/Spo
 
 murmur_hash.o: $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.h $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/MurmurHash3.cpp -o $@ $(LDFLAGS)
-
-hash.o: $(DEVELOPMENT_INCLUDE_DIR)/hash.h $(DEVELOPMENT_INCLUDE_DIR)/hash.c
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(DEVELOPMENT_INCLUDE_DIR)/hash.c -o $@ $(LDFLAGS)
 
 clean:
 	rm -f *.o kmerge
