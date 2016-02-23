@@ -94,5 +94,22 @@ class KMerge {
     ~HashSeq() {}
   };
 
+  class HashSeqPE {
+  public:
+    param_struct& params;
+    btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts;
+    const std::vector<std::tuple<std::vector<std::string>, std::string, uint> >& jobs;
+    std::mutex& mtx;
+    bool print_status;
+
+    void operator() (long i) const;
+
+  HashSeqPE(param_struct& params_, btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts_, const std::vector<std::tuple<std::vector<std::string>, std::string, uint> >& jobs_, std::mutex& mtx_, bool print_status_) : params(params_), hashed_counts(hashed_counts_), jobs(jobs_), mtx(mtx_), print_status(print_status_) {}
+
+
+    ~HashSeqPE() {}
+  };
+
+
 };
 

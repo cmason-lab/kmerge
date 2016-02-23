@@ -367,3 +367,16 @@ void KMerge::HashSeq::operator() (long i) const {
   if (print_status) params.kmerge->dlog << dlib::LINFO << "Finished processing " << params.group_name << "|" << seq_id << "|" << start << ":" << end;
 }
 
+void KMerge::HashSeqPE::operator() (long i) const {
+  std::tuple<std::vector<std::string>, std::string, uint> job = jobs[i];
+  std::vector<std::string> seqs = std::get<0>(job);
+  std::string base_id = std::get<1>(job);
+  uint k = std::get<2>(job);
+
+  if (print_status) params.kmerge->dlog << dlib::LINFO << "Processing " << params.group_name << "|" << base_id;
+
+  params.kmerge->hash_seq(seqs, k, hashed_counts, base_id, mtx);
+
+  if (print_status) params.kmerge->dlog << dlib::LINFO << "Finished processing " << params.group_name << "|" << base_id;
+}
+
