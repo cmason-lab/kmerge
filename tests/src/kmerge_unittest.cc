@@ -8,8 +8,9 @@
 #include <dlib/threads.h>
 #include <dlib/serialize.h>
 #include <dlib/logger.h>
-#include <iomanip>
 #include <sys/stat.h>
+#include <iomanip>
+
 
 TEST_CASE("GenerateTruncatedHashes", "[KmerGenerator]") {
   std::set<uint> murmur_set;
@@ -200,6 +201,68 @@ TEST_CASE("CountKmersInFastqFileBasic", "[HashTest]") {
   REQUIRE(jf_counts.size() == kmer_counts.size());
 }
 
+TEST_CASE("CountKmersInPEFastqFile", "[HashTest]") {
+
+  int k = 5, l;
+  std::vector<std::map<std::string,uint> > kmer_counts;
+  std::map<std::string, uint> jf_counts;
+  kseq_t *seq;
+  gzFile fp;
+  std::vector<std::string> kmers;
+
+  fp = gzopen("/home/darryl/Development/kmerge/tests/sample/sample.pe.fastq.gz", "rb");
+  seq = kseq_init(fp);
+  uint seq_id = 0;
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    for (int i = 0; i < seq->seq.l - k + 1; i++) {
+      std::string kmer = seq_str.substr(i, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { // skip kmers containing non-nucleotides
+	continue;
+      }
+      kmers.push_back(kmer);
+    }
+    if (seq_id % 2 == 1) {
+      std::map<std::string, uint> cnt_map;
+      for (auto it = kmers.begin(); it != kmers.end(); it++) {
+	cnt_map[*it]++;
+      }
+      kmer_counts.push_back(cnt_map);
+      kmers.clear();
+      cnt_map.clear();
+    }
+    seq_id++;
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
+  std::string base_dir("/home/darryl/Development/kmerge/tests/sample/split/");
+  ifstream in_file;
+  for (uint i=0; i<kmer_counts.size(); i++) {
+    std::stringstream filename;
+    filename << "x" << setfill('0') << setw(4) << i << ".cnt";
+    in_file.open(base_dir + filename.str());
+    std::string seq2;
+    uint count;
+    if (in_file.is_open()) {
+      while ( !in_file.eof() ) {
+	in_file >> seq2 >> count;
+	if (seq2 != "") {
+	  jf_counts[seq2] = count;
+	  // multiply count by 2 because test PE reads are simply duplicates
+	  REQUIRE(kmer_counts[i][seq2] == count*2);
+	}
+      }
+    }    
+    in_file.close();
+ 
+    REQUIRE(jf_counts.size() == kmer_counts[i].size());
+    jf_counts.clear();
+  }
+}
+
+
 TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
   std::map<uint, uint> jf_hashed_counts;
   btree::btree_map<uint,uint> hashed_counts;
@@ -343,6 +406,112 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
 
 }
 
+
+TEST_CASE("GeneratePairedEndBaseID", "[HashTest]") {
+  std::string r_seq = R"(sequence\1)", l_seq = R"(sequence\2)";
+  std::string base;
+
+  base = KMerge::get_seq_base_id(r_seq, l_seq);
+  REQUIRE(base == "sequence");
+
+  r_seq = R"(sequence|1)";
+  l_seq = R"(sequence|2)";
+  base = KMerge::get_seq_base_id(r_seq, l_seq);
+  REQUIRE(base == "sequence");
+
+  r_seq = R"(sequence:1)";
+  l_seq = R"(sequence:2)";
+  base = KMerge::get_seq_base_id(r_seq, l_seq);
+  REQUIRE(base == "sequence");
+
+}
+
+TEST_CASE("CountHashedKmersInPEFastqFile", "[HashTest]") {
+  btree::btree_map<std::string, btree::btree_map<uint,uint> > hashed_counts;
+  btree::btree_map<uint, uint> jf_hashed_counts;
+  std::vector<uint> counts;
+  std::vector<uint> hashes;
+  std::vector<uint> indices;
+  param_struct params;
+  std::vector<std::string> seq_ids;
+  kseq_t *seq;
+  gzFile fp;
+  int l;
+  std::mutex mtx;
+
+
+  params.k_val_start = 5;
+  params.k_val_end = 5;
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.pe.fastq.gz";
+  params.group_name = "sample";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;  
+
+
+
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
+
+  params.kmerge = kmerge;
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  uint seq_idx = 0;
+  std::vector<std::string> seq_tup, seq_names;
+  std::string base_id;
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    seq_names.push_back(seq_name);
+    if (seq_idx % 2 == 1) {
+      base_id = KMerge::get_seq_base_id(seq_names[0], seq_names[1]);
+      seq_ids.push_back(base_id);
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	bool success = params.kmerge->hash_seq(seq_tup, k, hashed_counts, base_id, mtx);
+	REQUIRE(success == true);
+      }
+      seq_tup.clear();
+      seq_names.clear();
+    }
+    seq_idx++;
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
+
+  std::string base_dir("/home/darryl/Development/kmerge/tests/sample/split/");
+  std::string seq_str2, last = "";
+  uint count;
+  ifstream in_file;
+  
+  for (auto seq_id: seq_ids) {
+    std::vector<std::string>::iterator iter = std::find(seq_ids.begin(), seq_ids.end(), seq_id);
+    uint idx = iter - seq_ids.begin();
+    std::stringstream filename;
+    filename << "x" << setfill('0') << setw(4) << idx << ".cnt";
+    in_file.open(base_dir + filename.str());
+    std::string seq2;
+    uint count;
+ 
+    if (in_file.is_open()) {
+      while ( !in_file.eof() ) {
+	in_file >> seq_str2 >> count;
+	if (seq_str2 != last) {
+	  uint hash = kmerge->hash_kmer(seq_str2);
+	  jf_hashed_counts[hash] = jf_hashed_counts[hash] + count;
+	}
+	last = seq_str2;
+      }
+    }
+    in_file.close();
+    REQUIRE(jf_hashed_counts.size() == hashed_counts[seq_id].size());
+    for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
+      REQUIRE(hashed_counts[seq_id][b_it->first] == b_it->second*2);
+    }
+    jf_hashed_counts.clear();
+  }
+
+  delete kmerge;
+
+}
 
 
 TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
@@ -496,6 +665,95 @@ TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
 
   delete kmerge;
 }
+
+
+/*TEST_CASE("CountHashedKmersInParallelFastqPE", "[HashTest]") {
+  btree::btree_map<std::string, btree::btree_map<uint, uint> > hashed_counts, hashed_counts2;
+  int l;
+  param_struct params;
+  std::vector<std::tuple<uint, uint, uint, uint> > coords;
+  uint pieces, piece_length;
+  std::mutex mtx;
+  kseq_t *seq;
+  gzFile fp;
+  std::vector<std::vector<std::string> > seqs;
+  std::vector<std::string> seq_tup;
+  uint seq_id;
+  
+  params.k_val_start = 3;
+  params.k_val_end = 11;
+  params.seq_filename = "/home/darryl/Development/kmerge/tests/sample/sample.pe.fastq.gz";
+  params.group_name = "sample";
+  params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
+
+  KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
+  params.kmerge = kmerge;
+
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  seq_id = 0;
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    if (seq_id % 1 == 0){
+      seq_tup.push_back(seq_str);
+    } else {
+      seq_tup.push_back(seq_str);
+    }
+    if ((seq_id % 2 == 0) && (seq_id != 0)) {
+      seqs.push_back(seq_tup);
+      for (uint i=0; i < seq_tup.size(); i++){
+	uint str_len = seq_str.size();
+	for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	  if (str_len < k) {
+	    continue;
+	  } else {
+	    pieces = params.num_threads;
+	    piece_length = str_len / pieces;
+	  }
+	  uint pos = 0;
+	  while (pos < str_len) {
+	    uint start = pos, end = pos + piece_length + k - 1;
+	    if (end > str_len) end = str_len;
+	    coords.push_back(std::make_tuple(seq_id, k, start, end));
+	    pos += piece_length;
+	    if (end == str_len) break; // all sequence has been accounted for
+	  }
+	}
+      }
+    } 
+    seq_id++;
+  }
+  KMerge::HashSeq func_pe(params, seqs, hashed_counts, coords, mtx, false);
+  dlib::parallel_for(params.num_threads, 0, coords.size(), func_pe);
+  coords.clear();
+  kseq_destroy(seq);
+  gzclose(fp);
+  
+
+ 
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s);
+    for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+      bool success = params.kmerge->hash_seq(seq_str, k, hashed_counts2, mtx);
+      REQUIRE(success == true);
+    }
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
+  REQUIRE(hashed_counts.size() == hashed_counts2.size());
+
+  for (auto hc_iter: hashed_counts) {
+    std::equal(hashed_counts[hc_iter.first].begin(), hashed_counts[hc_iter.first].end(), hashed_counts2[hc_iter.first].begin(), 
+	       [] (auto a, auto b) { return ((a.first == b.first) && (a.second == b.second)); });
+  }
+
+  delete kmerge;
+  }*/
+
 
 
 TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {

@@ -101,6 +101,20 @@ uint KMerge::hash_kmer(const std::string& kmer) {
   return KMerge::hash_kmer(kmer, this->hash_type, this->trunc_type);
 }
 
+std::string KMerge::get_seq_base_id(const std::string& r_seq, const std::string& l_seq) {
+  std::string base;
+
+  for (uint i=0; i <= r_seq.size(); i++) {
+    if (r_seq[i] == l_seq[i]) {
+      base.push_back(r_seq[i]);
+    } else {
+      base.pop_back();
+      break;
+    }
+  }
+  return base;
+}
+
 
 bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, uint>& hashed_counts, bool split, bool print_status) {
   std::vector<std::tuple<uint, uint, uint, uint> > coords;
@@ -176,6 +190,37 @@ bool KMerge::hash_seq(std::string& seq, uint k, btree::btree_map<uint, uint>& ha
   return true;
 }
 
+
+bool KMerge::hash_seq(const std::vector<std::string>& seq_tup, uint k, btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts, const std::string& seq_id, std::mutex& mtx) {
+  std::vector<uint> hashes;
+  uint hash;
+
+  for (auto seq: seq_tup) {
+    for (uint j = 0; j < seq.size() - k + 1; j++) {
+      std::string kmer = seq.substr(j, k);
+      std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+      if(kmer.find_first_not_of("ACGT") != std::string::npos) { 
+	// skip kmers containing non-nucleotides            
+	continue;
+      }
+      hash = this->hash_kmer(kmer);
+      hashes.push_back(hash);
+    }
+  }
+  if (hashed_counts.find(seq_id) == hashed_counts.end()) {
+    btree::btree_map<uint, uint> btm;
+    
+    hashed_counts[seq_id] = btm;
+  }
+
+  mtx.lock();
+  for (auto it = hashes.begin(); it != hashes.end(); it++) hashed_counts[seq_id][*it]++;
+  mtx.unlock();
+
+  hashes.clear();
+  std::vector<uint>().swap(hashes);
+  return true;
+}
 
  
 bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& filename){

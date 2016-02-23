@@ -8,7 +8,7 @@
 #include "klib/kseq.h"
 #include <zlib.h>
 #include "cpp-btree/btree_map.h"
-#include <mutex>     
+#include <mutex>
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -53,8 +53,10 @@ class KMerge {
   ~KMerge();
   static std::string rev_comp(const std::string&);
   static uint hash_kmer(const std::string&, const HashEnumType, const TruncType);
+  static std::string get_seq_base_id(const std::string&, const std::string&);
   bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool, bool);
   bool hash_seq(std::string&, uint, btree::btree_map<uint, uint>&, std::mutex&);
+  bool hash_seq(const std::vector<std::string>&, uint, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, const std::string&, std::mutex&);
   bool add_dataset(const std::vector<uint>&, const std::string&);
   bool add_taxonomy(const std::string&);
   uint hash_kmer(const std::string&);
