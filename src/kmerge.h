@@ -34,7 +34,10 @@ struct param_struct {
   uint num_threads;
   std::string hashes_filename;
   std::string counts_filename;
+  std::string indices_filename;
+  std::string ids_filename;
   bool is_ref;
+  bool paired_end;
 };
 
 
@@ -55,9 +58,10 @@ class KMerge {
   static uint hash_kmer(const std::string&, const HashEnumType, const TruncType);
   static std::string get_seq_base_id(const std::string&, const std::string&);
   bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool, bool);
+  bool count_hashed_kmers_pe(param_struct&, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, bool);
   bool hash_seq(std::string&, uint, btree::btree_map<uint, uint>&, std::mutex&);
   bool hash_seq(const std::vector<std::string>&, uint, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, const std::string&, std::mutex&);
-  bool add_dataset(const std::vector<uint>&, const std::string&);
+  template<typename T> bool add_dataset(const std::vector<T>&, const std::string&);
   bool add_taxonomy(const std::string&);
   uint hash_kmer(const std::string&);
 
@@ -68,6 +72,7 @@ class KMerge {
 
       void execute();
       void check_memory();
+      void execute_pe();
     
       BuilderTask(const param_struct params) {
 	this->params = params;

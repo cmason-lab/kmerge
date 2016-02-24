@@ -166,6 +166,43 @@ bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, ui
   return true;
 }
 
+bool KMerge::count_hashed_kmers_pe(param_struct& params,  btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts, bool print_status) {
+  std::vector<std::tuple<std::vector<std::string>, std::string, uint> > jobs;
+  std::mutex mtx;
+  kseq_t *seq;
+  std::vector<std::string> seq_tup, seq_ids, seq_names;
+  gzFile fp;
+  uint seq_idx = 0;
+  std::string base_id;
+  int l;
+
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    seq_names.push_back(seq_name);
+    if (seq_idx % 2 == 1) {
+      base_id = KMerge::get_seq_base_id(seq_names[0], seq_names[1]);
+      seq_ids.push_back(base_id);
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+        jobs.push_back(std::make_tuple(seq_tup, base_id, k));
+      }
+      seq_tup.clear();
+      seq_names.clear();
+    }
+    seq_idx++;
+  }
+  KMerge::HashSeqPE func(params, hashed_counts, jobs, mtx, false);
+  dlib::parallel_for(params.num_threads, 0, jobs.size(), func);
+  jobs.clear();
+  kseq_destroy(seq);
+  gzclose(fp);
+
+  return true;
+}
+
+
 bool KMerge::hash_seq(std::string& seq, uint k, btree::btree_map<uint, uint>& hashed_counts, std::mutex& mtx) {
   std::vector<uint> hashes;
   uint hash;
@@ -222,8 +259,8 @@ bool KMerge::hash_seq(const std::vector<std::string>& seq_tup, uint k, btree::bt
   return true;
 }
 
- 
-bool KMerge::add_dataset(const std::vector<uint>& data, const std::string& filename){
+template <typename T> 
+bool KMerge::add_dataset(const std::vector<T>& data, const std::string& filename){
   cs compressor;
   std::stringstream ss;
   std::ofstream fs(filename.c_str(), ios::binary);
@@ -350,6 +387,104 @@ void KMerge::BuilderTask::execute() {
   return;
 
 }
+
+void KMerge::BuilderTask::execute_pe() {
+  uint num_sequences;
+  btree::btree_map<std::string, btree::btree_map<uint, uint> > hashed_counts;
+
+  params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
+  if(!(params.kmerge->count_hashed_kmers_pe(params, hashed_counts, params.is_ref))) {
+    params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
+    return;
+  } else {
+    params.kmerge->dlog << dlib::LINFO << "Finished parsing: " << params.seq_filename;  
+  }
+
+  num_sequences = hashed_counts.size();
+
+  params.kmerge->dlog << dlib::LINFO << "Number of sequences for " << params.group_name << ": " << num_sequences;
+
+
+  params.kmerge->dlog <<dlib::LINFO << "Separating hashes and counts for " << params.group_name;
+  std::vector<uint> hashes, counts, indices(num_sequences+1);
+  std::vector<std::string> ids(num_sequences);
+
+  indices[0] = 0;
+  uint i = 0;
+  for (auto s_iter = hashed_counts.begin(); s_iter != hashed_counts.end(); s_iter++) {
+    uint last;
+    for (auto m_iter = s_iter->second.begin(); m_iter != s_iter->second.end(); m_iter++) {
+      if (m_iter == s_iter->second.begin()) {
+	hashes.push_back(m_iter->first);
+	last = m_iter->first;
+      } else {
+	hashes.push_back(m_iter->first - last);
+	last = m_iter->first;
+      }
+      counts.push_back(m_iter->second);
+    }
+    indices[i+1] = indices[i] + s_iter->second.size();
+    ids[i] = s_iter->first;
+    i++;
+    // clear the map for this sequence
+    btree::btree_map<uint,uint>().swap(s_iter->second);
+    s_iter->second.clear();
+  }
+
+  hashes.resize(hashes.size());
+  counts.resize(counts.size());
+
+  params.kmerge->dlog <<dlib::LINFO << "Finished separating hashes and counts for " << params.group_name;
+  params.kmerge->dlog << dlib::LINFO << "Processed " << hashes.size() << " hashes for " << params.group_name;
+
+  // remove all elements from sample map as they are no longer needed
+  hashed_counts.clear();
+  btree::btree_map<std::string, btree::btree_map<uint,uint> >().swap(hashed_counts);
+
+  params.kmerge->dlog <<dlib::LINFO << "Writing data for " << params.group_name;
+
+  if(!params.kmerge->add_dataset(hashes, params.hashes_filename)) {                                                
+    params.kmerge->dlog << dlib::LERROR << "Unable to add hashes for " << params.group_name;
+    return;                                                                                                                                                                          
+  }                                                                
+  
+  hashes.clear();
+  std::vector<uint>().swap( hashes );
+
+
+  if(!params.kmerge->add_dataset(counts, params.counts_filename)) {                                                     
+    params.kmerge->dlog << dlib::LERROR << "Unable to add counts for " << params.group_name;
+    return;                                                                                                                                                                          
+  }
+
+  counts.clear();
+  std::vector<uint>().swap( counts );
+
+
+  if(!params.kmerge->add_dataset(indices, params.indices_filename)) {                                                     
+    params.kmerge->dlog << dlib::LERROR << "Unable to add indices for " << params.group_name;
+    return;                                                                                                                                                                          
+  }
+
+  indices.clear();
+  std::vector<uint>().swap( indices );
+
+
+  if(!params.kmerge->add_dataset(ids, params.ids_filename)) {                                                     
+    params.kmerge->dlog << dlib::LERROR << "Unable to add ids for " << params.group_name;
+    return;                                                                                                                                                                          
+  }
+
+  ids.clear();
+  std::vector<std::string>().swap( ids );
+
+    
+  params.kmerge->dlog << dlib::LINFO << "Done (" << params.group_name  << ")";
+
+  return;
+
+}
+
 
 void KMerge::HashSeq::operator() (long i) const {
   std::tuple<uint, uint, uint, uint> coord = coords[i];
