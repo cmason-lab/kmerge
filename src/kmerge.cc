@@ -1,3 +1,4 @@
+
 #include "kmerge.h"
 #include "lookup3.c"
 #include "MurmurHash3.h"
@@ -166,15 +167,17 @@ bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<uint, ui
   return true;
 }
 
-bool KMerge::count_hashed_kmers_pe(param_struct& params,  btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts, bool print_status) {
+bool KMerge::count_hashed_kmers(param_struct& params,  btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts, bool print_status) {
   std::vector<std::tuple<std::vector<std::string>, std::string, uint> > jobs;
   std::mutex mtx;
   kseq_t *seq;
-  std::vector<std::string> seq_tup, seq_ids, seq_names;
+  std::vector<std::string> seq_tup, seq_names;
   gzFile fp;
   uint seq_idx = 0;
   std::string base_id;
   int l;
+  int mod_val = (params.paired_end) ? 2 : 1;
+  int mod_result = (params.paired_end) ? 1 : 0;
 
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
@@ -182,18 +185,18 @@ bool KMerge::count_hashed_kmers_pe(param_struct& params,  btree::btree_map<std::
     std::string seq_str(seq->seq.s), seq_name(seq->name.s);
     seq_tup.push_back(seq_str);
     seq_names.push_back(seq_name);
-    if (seq_idx % 2 == 1) {
-      base_id = KMerge::get_seq_base_id(seq_names[0], seq_names[1]);
-      seq_ids.push_back(base_id);
+    if (seq_idx % mod_val == mod_result) {
+      if (params.paired_end) base_id = KMerge::get_seq_base_id(seq_names[0], seq_names[1]);
+      
       for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
-        jobs.push_back(std::make_tuple(seq_tup, base_id, k));
+        jobs.push_back(std::make_tuple(seq_tup, (params.paired_end) ? base_id : seq_name, k));
       }
       seq_tup.clear();
       seq_names.clear();
     }
     seq_idx++;
   }
-  KMerge::HashSeqPE func(params, hashed_counts, jobs, mtx, false);
+  KMerge::HashSeqs func(params, hashed_counts, jobs, mtx, false);
   dlib::parallel_for(params.num_threads, 0, jobs.size(), func);
   jobs.clear();
   kseq_destroy(seq);
@@ -244,11 +247,13 @@ bool KMerge::hash_seq(const std::vector<std::string>& seq_tup, uint k, btree::bt
       hashes.push_back(hash);
     }
   }
+  mtx.lock();
   if (hashed_counts.find(seq_id) == hashed_counts.end()) {
     btree::btree_map<uint, uint> btm;
     
     hashed_counts[seq_id] = btm;
   }
+  mtx.unlock();
 
   mtx.lock();
   for (auto it = hashes.begin(); it != hashes.end(); it++) hashed_counts[seq_id][*it]++;
@@ -315,8 +320,16 @@ bool KMerge::add_taxonomy(const std::string& group_name) {
   return true;
 }
 
- 
 void KMerge::BuilderTask::execute() {
+  if (params.is_ref) {
+    hash_genome();
+  } else {
+    hash_sequences();
+  }
+}
+ 
+
+void KMerge::BuilderTask::hash_genome() {
   uint nz_count;
   btree::btree_map<uint, uint> hashed_counts;
 
@@ -388,12 +401,12 @@ void KMerge::BuilderTask::execute() {
 
 }
 
-void KMerge::BuilderTask::execute_pe() {
+void KMerge::BuilderTask::hash_sequences() {
   uint num_sequences;
   btree::btree_map<std::string, btree::btree_map<uint, uint> > hashed_counts;
 
   params.kmerge->dlog << dlib::LINFO << "Working on " << params.group_name;
-  if(!(params.kmerge->count_hashed_kmers_pe(params, hashed_counts, params.is_ref))) {
+  if(!(params.kmerge->count_hashed_kmers(params, hashed_counts, params.is_ref))) {
     params.kmerge->dlog << dlib::LERROR << "Unable to parse " << params.seq_filename;
     return;
   } else {
@@ -502,7 +515,7 @@ void KMerge::HashSeq::operator() (long i) const {
   if (print_status) params.kmerge->dlog << dlib::LINFO << "Finished processing " << params.group_name << "|" << seq_id << "|" << start << ":" << end;
 }
 
-void KMerge::HashSeqPE::operator() (long i) const {
+void KMerge::HashSeqs::operator() (long i) const {
   std::tuple<std::vector<std::string>, std::string, uint> job = jobs[i];
   std::vector<std::string> seqs = std::get<0>(job);
   std::string base_id = std::get<1>(job);

@@ -336,7 +336,8 @@ TEST_CASE("CountHashedKmersInFastaFile", "[HashTest]") {
 
 
 TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
-  btree::btree_map<uint, uint> hashed_counts, jf_hashed_counts;
+  btree::btree_map<std::string, btree::btree_map<uint,uint> > hashed_counts;
+  btree::btree_map<uint, uint> combined_counts, jf_hashed_counts;
   param_struct params;
   std::vector<std::string> files;
   kseq_t *seq;
@@ -367,12 +368,20 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
 
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
+  uint seq_idx = 0;
+  std::vector<std::string> seq_tup;
+  std::string base_id;
   while ((l = kseq_read(seq)) >= 0) {
-    std::string seq_str(seq->seq.s);
-    for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
-      bool success = params.kmerge->hash_seq(seq_str, k, hashed_counts, mtx);
-      REQUIRE(success == true);
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    if (seq_idx % 1 == 0) {
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	bool success = params.kmerge->hash_seq(seq_tup, k, hashed_counts, seq_name, mtx);
+	REQUIRE(success == true);
+      }
+      seq_tup.clear();
     }
+    seq_idx++;
   }
   kseq_destroy(seq);
   gzclose(fp);
@@ -398,10 +407,16 @@ TEST_CASE("CountHashedKmersInFastqFile", "[HashTest]") {
 
   delete kmerge;
 
-  REQUIRE(jf_hashed_counts.size() == hashed_counts.size());
+  for (auto s_iter: hashed_counts) {
+    for (auto m_iter: s_iter.second) {
+      combined_counts[m_iter.first] += m_iter.second;
+    }
+  }
+
+  REQUIRE(jf_hashed_counts.size() == combined_counts.size());
 
   for (btree::btree_map<uint, uint>::const_iterator b_it = jf_hashed_counts.begin(); b_it != jf_hashed_counts.end(); b_it++) {
-    REQUIRE(hashed_counts[b_it->first] == b_it->second);
+    REQUIRE(combined_counts[b_it->first] == b_it->second);
   }
 
 }
@@ -589,16 +604,15 @@ TEST_CASE("CountHashedKmersInParallelFasta", "[HashTest]") {
 }
 
 TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
-  btree::btree_map<uint, uint> hashed_counts, hashed_counts2;
+  btree::btree_map<std::string, btree::btree_map<uint, uint> > hashed_counts, hashed_counts2;
   int l;
   param_struct params;
-  std::vector<std::tuple<uint, uint, uint, uint> > coords;
-  uint pieces, piece_length;
+  std::vector<std::tuple<std::vector<std::string>, std::string, uint> > jobs;
   std::mutex mtx;
   kseq_t *seq;
   gzFile fp;
-  std::vector<std::string> seqs;
-  uint seq_id;
+  std::vector<std::string> seq_ids, seq_tup;
+  uint seq_idx = 0;
   
   params.k_val_start = 3;
   params.k_val_end = 11;
@@ -612,53 +626,55 @@ TEST_CASE("CountHashedKmersInParallelFastq", "[HashTest]") {
 
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
-  seq_id = 0;
   while ((l = kseq_read(seq)) >= 0) {
-    std::string seq_str(seq->seq.s);
-    seqs.push_back(seq_str);
-    uint str_len = seq_str.size();
-    for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
-      if (str_len < k) {
-	continue;
-      } else {
-	pieces = params.num_threads;
-	piece_length = str_len / pieces;
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    seq_ids.push_back(seq_name);
+    if (seq_idx % 1 == 0) {
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	jobs.push_back(std::make_tuple(seq_tup, seq_name, k));
       }
-      uint pos = 0;
-      while (pos < str_len) {
-	uint start = pos, end = pos + piece_length + k - 1;
-	if (end > str_len) end = str_len;
-	coords.push_back(std::make_tuple(seq_id, k, start, end));
-	pos += piece_length;
-	if (end == str_len) break; // all sequence has been accounted for
-      }
-    } 
-    seq_id++;
+      seq_tup.clear();
+    }
+    seq_idx++;
   }
-  KMerge::HashSeq func(params, seqs, hashed_counts, coords, mtx, false);
-  dlib::parallel_for(params.num_threads, 0, coords.size(), func);
-  coords.clear();
+  REQUIRE(jobs.size() == 5000);
+  KMerge::HashSeqs func(params, hashed_counts, jobs, mtx, false);
+  dlib::parallel_for(params.num_threads, 0, jobs.size(), func);
+  jobs.clear();
   kseq_destroy(seq);
   gzclose(fp);
   
-
  
   fp = gzopen(params.seq_filename.c_str(), "r");
   seq = kseq_init(fp);
+  seq_idx = 0;
   while ((l = kseq_read(seq)) >= 0) {
-    std::string seq_str(seq->seq.s);
-    for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
-      bool success = params.kmerge->hash_seq(seq_str, k, hashed_counts2, mtx);
-      REQUIRE(success == true);
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    if (seq_idx % 1 == 0) {
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	bool success = params.kmerge->hash_seq(seq_tup, k, hashed_counts2, seq_name, mtx);
+	REQUIRE(success == true);
+      }
+      seq_tup.clear();
     }
+    seq_idx++;
   }
   kseq_destroy(seq);
   gzclose(fp);
 
+
   REQUIRE(hashed_counts.size() == hashed_counts2.size());
 
-  for (auto it = hashed_counts.begin(); it != hashed_counts.end(); it++) {
-    REQUIRE(hashed_counts[it->first] == hashed_counts2[it->first]);
+  for (auto seq_id: seq_ids) {
+    REQUIRE(hashed_counts[seq_id].size() == hashed_counts2[seq_id].size());
+    for (auto cnt_map: hashed_counts[seq_id]) {
+      uint hash = cnt_map.first;
+      uint count = cnt_map.second;
+      REQUIRE(hashed_counts2[seq_id][hash] == count);
+    }
+
   }
 
   delete kmerge;
@@ -706,7 +722,7 @@ TEST_CASE("CountHashedKmersInParallelPEFastq", "[HashTest]") {
     }
     seq_idx++;
   }
-  KMerge::HashSeqPE func(params, hashed_counts, jobs, mtx, false);
+  KMerge::HashSeqs func(params, hashed_counts, jobs, mtx, false);
   dlib::parallel_for(params.num_threads, 0, jobs.size(), func);
   jobs.clear();
   kseq_destroy(seq);
@@ -817,13 +833,17 @@ TEST_CASE("ParseKmerCountsAndCreateDB", "[HashTest]") {
 
 TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   param_struct params;
-  std::vector<uint> hashes_in, counts_in;
+  std::vector<uint> hashes_in, counts_in, indices_in;
+  std::vector<std::string> ids_in, seq_tup;
+  btree::btree_map<std::string, btree::btree_map<uint,uint> > hashed_counts;
   dlib::thread_pool tp(1);
   std::mutex mtx;
   cs decompressor;
   std::stringstream ss;
   std::ifstream fs;
-
+  int l;
+  kseq_t *seq;
+  gzFile fp;
 
 
   params.k_val_start = 3;
@@ -832,9 +852,11 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   params.seq_filename = std::string("./") + params.group_name + std::string("/") + params.group_name + std::string(".fastq.gz");
   params.hashes_filename = std::string("./reference/") + params.group_name + std::string(".hashes.bin");
   params.counts_filename = std::string("./reference/") + params.group_name + std::string(".counts.bin");
-
+  params.indices_filename = std::string("./reference/") + params.group_name + std::string(".indices.bin");
+  params.ids_filename = std::string("./reference/") + params.group_name + std::string(".ids.bin");
   params.num_threads = (params.k_val_end - params.k_val_start) / 2 + 1;
   params.is_ref = false;
+  params.paired_end = false;
 
   KMerge *kmerge = new KMerge("lookup3", ".", "./reference", 0);
 
@@ -844,6 +866,24 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   tp.add_task(*task, &KMerge::BuilderTask::execute);
   tp.wait_for_all_tasks();
 
+  fp = gzopen(params.seq_filename.c_str(), "r");
+  seq = kseq_init(fp);
+  uint seq_idx = 0;
+  while ((l = kseq_read(seq)) >= 0) {
+    std::string seq_str(seq->seq.s), seq_name(seq->name.s);
+    seq_tup.push_back(seq_str);
+    if (seq_idx % 1 == 0) {
+      for (uint k = params.k_val_start; k <= params.k_val_end; k+=2) {
+	bool success = params.kmerge->hash_seq(seq_tup, k, hashed_counts, seq_name, mtx);
+	REQUIRE(success == true);
+      }
+      seq_tup.clear();
+    }
+    seq_idx++;
+  }
+  kseq_destroy(seq);
+  gzclose(fp);
+
 
   delete kmerge;
 
@@ -852,30 +892,67 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromFastq", "[HashTest]") {
   fs.close();
   dlib::deserialize(hashes_in, ss);
   ss.str(std::string());
-  std::partial_sum(hashes_in.begin(), hashes_in.end(), hashes_in.begin());
 
   fs.open (params.counts_filename.c_str(), ios::binary);
   decompressor.decompress(fs, ss);
   fs.close();
   dlib::deserialize(counts_in, ss);
   ss.str(std::string());
-  
-  REQUIRE(hashes_in.size() == 8727);
-  REQUIRE(counts_in.size() == 8727);
-  
-  //ensure that hashes are in sorted order
-  uint last = 0;
-  for (std::vector<uint>::const_iterator v_iter = hashes_in.begin(); v_iter != hashes_in.end(); v_iter++) {
-    if (v_iter != hashes_in.begin()) {
-      REQUIRE(*v_iter > last);
-    }
-    last = *v_iter;
+
+  fs.open (params.indices_filename.c_str(), ios::binary);
+  decompressor.decompress(fs, ss);
+  fs.close();
+  dlib::deserialize(indices_in, ss);
+  ss.str(std::string());
+
+  for (uint i=0; i < indices_in.size() - 1; i++) {
+    std::partial_sum(hashes_in.begin() + indices_in[i], hashes_in.begin() + indices_in[i+1], hashes_in.begin() + indices_in[i]);
   }
+
+  fs.open (params.ids_filename.c_str(), ios::binary);
+  decompressor.decompress(fs, ss);
+  fs.close();
+  dlib::deserialize(ids_in, ss);
+  ss.str(std::string());
+
+
+  REQUIRE(counts_in.size() == 289211);
+  REQUIRE(hashes_in.size() == 289211);
+  REQUIRE(indices_in.size() == 1001);
+  REQUIRE(ids_in.size() == 1000);
+  REQUIRE(indices_in.back() == 289211);
+  uint total_hash_count=0;
+  for (auto iter: hashed_counts) {
+    total_hash_count += iter.second.size();
+  }
+  REQUIRE(total_hash_count == 289211);
+ 
+
+  //ensure that hashes are in sorted order in each sample
+  for (uint i=0; i < ids_in.size(); i++) {
+    std::string seq_id = ids_in[i];
+    uint last = 0;
+    REQUIRE((indices_in[i+1]-indices_in[i]) == hashed_counts[seq_id].size());
+    for (uint j=indices_in[i]; j < indices_in[i+1]; j++) {
+      if (j != indices_in[i]) {
+	REQUIRE(hashes_in[j] > last);
+      }
+      REQUIRE(hashed_counts[seq_id][hashes_in[j]] == counts_in[j]);
+      last = hashes_in[j];
+    }
+  }
+  
 
   if( remove( params.hashes_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
 
   if( remove( params.counts_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
+
+  if( remove( params.indices_filename.c_str() ) != 0 )
+    perror( "Error deleting file" );
+
+  if( remove( params.ids_filename.c_str() ) != 0 )
     perror( "Error deleting file" );
 
 }
@@ -1238,7 +1315,7 @@ TEST_CASE("ThreadedParseKmerCountsAndCreateDBFromPEFastq", "[HashTest]") {
   params.kmerge = kmerge;
 
   KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
-  tp.add_task(*task, &KMerge::BuilderTask::execute_pe);
+  tp.add_task(*task, &KMerge::BuilderTask::execute);
   tp.wait_for_all_tasks();
 
 

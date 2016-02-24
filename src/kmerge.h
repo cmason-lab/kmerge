@@ -58,7 +58,7 @@ class KMerge {
   static uint hash_kmer(const std::string&, const HashEnumType, const TruncType);
   static std::string get_seq_base_id(const std::string&, const std::string&);
   bool count_hashed_kmers(param_struct&, btree::btree_map<uint, uint>&, bool, bool);
-  bool count_hashed_kmers_pe(param_struct&, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, bool);
+  bool count_hashed_kmers(param_struct&, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, bool);
   bool hash_seq(std::string&, uint, btree::btree_map<uint, uint>&, std::mutex&);
   bool hash_seq(const std::vector<std::string>&, uint, btree::btree_map<std::string, btree::btree_map<uint, uint> >&, const std::string&, std::mutex&);
   template<typename T> bool add_dataset(const std::vector<T>&, const std::string&);
@@ -72,7 +72,8 @@ class KMerge {
 
       void execute();
       void check_memory();
-      void execute_pe();
+      void hash_genome();
+      void hash_sequences();
     
       BuilderTask(const param_struct params) {
 	this->params = params;
@@ -99,7 +100,7 @@ class KMerge {
     ~HashSeq() {}
   };
 
-  class HashSeqPE {
+  class HashSeqs {
   public:
     param_struct& params;
     btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts;
@@ -109,10 +110,10 @@ class KMerge {
 
     void operator() (long i) const;
 
-  HashSeqPE(param_struct& params_, btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts_, const std::vector<std::tuple<std::vector<std::string>, std::string, uint> >& jobs_, std::mutex& mtx_, bool print_status_) : params(params_), hashed_counts(hashed_counts_), jobs(jobs_), mtx(mtx_), print_status(print_status_) {}
+  HashSeqs(param_struct& params_, btree::btree_map<std::string, btree::btree_map<uint, uint> >& hashed_counts_, const std::vector<std::tuple<std::vector<std::string>, std::string, uint> >& jobs_, std::mutex& mtx_, bool print_status_) : params(params_), hashed_counts(hashed_counts_), jobs(jobs_), mtx(mtx_), print_status(print_status_) {}
 
 
-    ~HashSeqPE() {}
+    ~HashSeqs() {}
   };
 
 

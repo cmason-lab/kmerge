@@ -14,6 +14,7 @@ int main(int argc, char const ** argv) {
   parser.add_option("k", "Start and end k-mer values", 2);
   parser.add_option("d", "Location of sequences and taxonomy directories", 1);
   parser.add_option("i", "Location of single sequence file", 1);
+  parser.add_option("p", "Sequencing reads are paired-end", 0);
   parser.add_option("o", "Location to write output files (must already exist)", 1);
   parser.add_option("u", "Truncated hash value in bits (8 or 16)", 1);
   parser.add_option("t", "Max number of threads to use for worker and hash threads", 2);
@@ -29,18 +30,19 @@ int main(int argc, char const ** argv) {
     return 0;
   }
   //Ensure options only defined once
-  const char* one_time_opts[] = {"k", "d", "i", "o", "u", "t", "f", "h"};
+  const char* one_time_opts[] = {"k", "d", "i", "p", "o", "u", "t", "f", "h"};
   parser.check_one_time_options(one_time_opts);
 
   //Check only one of d and i options given
   parser.check_incompatible_options("d", "i");
+  parser.check_incompatible_options("d", "p");
 
   parser.check_option_arg_range("k", 3, 31);
 
   // check if the -h option was given on the command line
   if (parser.option("h")) {
     // display all the command line options
-    std::cout << "Usage: kmerge -k k_start k_end (-d|-i|-o|-u|-t|-f)" << std::endl;
+    std::cout << "Usage: kmerge -k k_start k_end (-d|-i|-p|-o|-u|-t|-f)" << std::endl;
     parser.print_options(); 
     return 0;
   }
@@ -57,6 +59,7 @@ int main(int argc, char const ** argv) {
   uint k_val_end = 0;
   std::string seq_dir("./"), hash_func("lookup3"), in_file, out_dir("./reference");
   uint work_threads = 1, hash_threads = 1, trunc_mode=0;
+  bool paired_end=false;
 
   k_val_start = atoi(parser.option("k").argument(0).c_str());
   k_val_end = atoi(parser.option("k").argument(1).c_str());
@@ -73,6 +76,9 @@ int main(int argc, char const ** argv) {
   if (parser.option("i")) {
     in_file = parser.option("i").argument();
     out_dir = "./sample";
+    if (parser.option("p")) {
+      paired_end = true;
+    }
   } 
   if (parser.option("o")) {
     out_dir = parser.option("o").argument();
@@ -123,8 +129,11 @@ int main(int argc, char const ** argv) {
       params.seq_filename = in_file;
       params.hashes_filename = out_dir + std::string("/") + params.group_name + std::string(".hashes.bin");
       params.counts_filename = out_dir + std::string("/") + params.group_name + std::string(".counts.bin");
+      params.indices_filename = out_dir + std::string("/") + params.group_name + std::string(".indices.bin");
+      params.ids_filename = out_dir + std::string("/") + params.group_name + std::string(".ids.bin");
       params.num_threads = hash_threads;
       params.is_ref = false;
+      params.paired_end = paired_end;
       KMerge::BuilderTask* task = new KMerge::BuilderTask(params);
       tp.add_task(*task, &KMerge::BuilderTask::execute);
       task_ptrs.push_back(task);
