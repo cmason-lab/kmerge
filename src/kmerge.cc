@@ -236,6 +236,7 @@ bool KMerge::hash_seq(const std::vector<std::string>& seq_tup, uint k, btree::bt
   uint hash;
 
   for (auto seq: seq_tup) {
+    if (seq.size() < k) continue;
     for (uint j = 0; j < seq.size() - k + 1; j++) {
       std::string kmer = seq.substr(j, k);
       std::transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
@@ -292,6 +293,7 @@ bool KMerge::add_taxonomy(const std::string& group_name) {
   path_root << "/" << group_name << "/taxonomy";
 
   in_file_ss << this->dir << path_root.str() << ".txt";
+
   ifstream in_file(in_file_ss.str().c_str());
 
 
