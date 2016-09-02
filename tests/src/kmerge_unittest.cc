@@ -19,11 +19,18 @@ TEST_CASE("BasicStringKernelTest", "[StringKernel]") {
   std::string kmer;
   uint count = 0;
 
+  // only generate the lexicographically ordered k-mers to reduce the total number 
+  // needed in the kernel by 2
+
   for (x = 0; x < 1ULL<<(2*k); ++x) {
     for (i = 0, y = x; i < k; ++i, y >>= 2)
       kmer.push_back("acgt"[y&3]);
     count++;
-    data.push_back(kmer);
+    // get reverse complement of k-mer
+    std::string rc = KMerge::rev_comp(kmer);
+    // check which is lexicographically first
+    // if this is lexicographically first, add k-mer, if not do nothing
+    if (kmer < rc) data.push_back(kmer);
     kmer.clear();
   }
 
@@ -39,15 +46,7 @@ TEST_CASE("BasicStringKernelTest", "[StringKernel]") {
   sk.set_data(data);
   sk.compute_kernel();
 
-  //int length = 3;
-  //double lambda = 0.5;
- 
-  //string_kernel sk(length, lambda, "none");
-
-  std::cout << sk(std::string("AAAAA"), std::string("AAAAA")) << std::endl;
-  std::cout << sk(std::string("AAAAA"), std::string("AACCA")) << std::endl;
-  std::cout << sk(std::string("AAAAA"), std::string("TTTTT")) << std::endl;
-
+  REQUIRE(sk(std::string("AAAAA"), std::string("aaaaa")) > 0);
   REQUIRE(sk(std::string("AAAAA"), std::string("AAAAA")) > sk(std::string("AAAAA"), std::string("AACCA")));
   REQUIRE(sk(std::string("AAAAA"), std::string("AAAAA")) == sk(std::string("AAAAA"), std::string("TTTTT")));
     

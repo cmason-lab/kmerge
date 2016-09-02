@@ -44,190 +44,6 @@ struct param_struct {
   bool paired_end;
 };
 
-struct string_kernel {
-  typedef double scalar_type;
-  typedef std::string sample_type;
-
-  typedef typename dlib::default_memory_manager mem_manager_type;
-
-  string_kernel(const float c, const int normalize, const int symbol_size,
-		const size_t max_length, int kn, double lambda)
-  : _c(c), _normalize(normalize), _symbol_size(symbol_size),
-    _max_length(max_length), _kn(kn), _lambda(lambda),
-    _string_data(0), _kernel(0)
-  {}
-
-  ~string_kernel() {
-    for (size_t i = 0; i < _string_data->size(); i++)
-      delete[] _kernel[i];
-    delete [] _kernel;
-    delete _string_data;
-  }
-
-  /** Set the dataset to be used by the kernel. */
-  void set_data(const std::vector<std::string> &strings) {
-    assert(strings.size() > 0);
-    _string_data = new DataSet(_max_length, _symbol_size);
-    _string_data->load_strings(strings);
-  }
-
-  /** Calculate the kernel. */
-  void compute_kernel() {
-    assert(_string_data);
-
-    // Initialize kernel 
-    _kernel = new scalar_type *[_string_data->size()];
-    for (size_t i = 0; i < _string_data->size(); i++)
-      _kernel[i] = new scalar_type[_string_data->size()];
-
-    // Start with all K filled with -1, then only calculate kernels as needed 
-    for (size_t i = 0; i < _string_data->size(); i++)
-      for (size_t j = 0; j < _string_data->size(); j++)
-	_kernel[i][j] = -1;
-
-
-    // Get values for normalization, it is computed for elements in diagonal 
-    std::vector<scalar_type> norms(_string_data->size());
-    if (_normalize) {
-      for (size_t i = 0; i < _string_data->size(); i++) {
-	norms[i] = kernel(_string_data->elements()[i], _string_data->elements()[i]);
-	_kernel[i][i] = 1;
-      }
-    }
-
-    // Compute kernel using dynamic programming 
-    run_kernel_dp(norms, _kernel);
-  }
-
-  /** Return pointer to kernel matrix. */
-  scalar_type **values() const {
-    assert(_kernel);
-    return _kernel;
-  }
-
-  void run_kernel_dp(const std::vector<scalar_type> &norms, scalar_type **K) const {
-    assert(_string_data);
-    for (size_t i = 0; i < _string_data->size(); i++) {
-      for (size_t j = 0; j < _string_data->size(); j++) {
-	if (K[j][i] == -1) {
-	  K[j][i] = kernel(_string_data->elements()[j], _string_data->elements()[i]);
-	  if (_normalize)
-	    K[j][i] /= sqrt(norms[i] * norms[j]);
-	  K[i][j] = K[j][i];
-	}
-      }
-    }
-  }
-
-
-  /** Return the size of the NxN kernel. */
-  size_t size() const {
-    assert(_string_data);
-    return _string_data->size();
-  }
-
-  const float _c;
-  const int _normalize;
-  const int _symbol_size;
-  const size_t _max_length;
-  const int _kn;
-  const double _lambda;
-  DataSet *_string_data;
-  scalar_type **_kernel;
-
-  scalar_type operator() (const sample_type& a, const sample_type& b) const {
-    // convert a -> DataElement x, b -> DataElement y
-    DataElement x, y;
-    size_t str_len = 0;
-    
-    str_len = a.length();
-    x.allocate(str_len);
-    for (size_t j = 0; j < str_len; j++) {
-      char temp = tolower(*(a.substr(j, 1).c_str()));
-      assert(static_cast<int>(temp) < _symbol_size);
-      x.attributes[j] = static_cast<int>(temp);
-    }
-
-    str_len = b.length();
-    y.allocate(str_len);
-    for (size_t j = 0; j < str_len; j++) {
-      char temp = tolower(*(b.substr(j, 1).c_str()));
-      assert(static_cast<int>(temp) < _symbol_size);
-      y.attributes[j] = static_cast<int>(temp);
-    }
-    
-    return kernel(x, y);
-  }
-
-  scalar_type kernel(const DataElement &x, const DataElement &y) const {
-    scalar_type **Kd[2];
-    for (int i = 0; i < 2; i++) {
-      Kd[i] = new scalar_type *[x.length + 1];
-      for (int j = 0; j < x.length + 1; j++) {
-	Kd[i][j] = new scalar_type[y.length + 1];
-      }
-    }
-
-    // Dynamic programming 
-    for (int i = 0; i < 2; i++) {
-      for (int j = 0; j < (x.length + 1); j++) {
-	for (int k = 0; k < (y.length + 1); k++) {
-	  Kd[i][j][k] = (i + 1) % 2;
-	}
-      }
-    }
-
-    // Calculate Kd and Kdd 
-    for (int i = 1; i <= (_kn - 1); i++) {
-      /* Set the Kd to zero for those lengths of s and t
-	 where s (or t) has exactly length i-1 and t (or s)
-	 has length >= i-1. L-shaped upside down matrix */
-      for (int j = (i - 1); j <= (x.length - 1); j++) {
-	Kd[i % 2][j][i - 1] = 0;
-      }
-      for (int j = (i - 1); j <= (y.length - 1); j++) {
-	Kd[i % 2][i - 1][j] = 0;
-      }
-      for (int j = i; j <= (x.length - 1); j++) {
-	scalar_type Kdd = 0;
-	for (int m = i; m <= (y.length - 1); m++) {
-	  if (x.attributes[j - 1] != y.attributes[m - 1]) {
-	    // ((.))-1 is because indices start with 0 (not with 1)
-	    Kdd = _lambda * Kdd;
-	  } else {
-	    Kdd = _lambda * (Kdd + (_lambda * Kd[(i + 1) % 2][j - 1][m - 1]));
-	  }
-	  Kd[i % 2][j][m] = _lambda * Kd[i % 2][j - 1][m] + Kdd;
-	}
-      }
-    }
-
-    // Calculate K 
-    scalar_type sum = 0;
-    for (int i = _kn; i <= x.length; i++) {
-      for (int j = _kn; j <= y.length; j++) {
-	if (x.attributes[((i)) - 1] == y.attributes[((j)) - 1]) {
-	  sum += _lambda * _lambda * Kd[(_kn - 1) % 2][i - 1][j - 1];
-	}
-      }
-    }
-    
-    // Delete 
-    for (int j = 0; j < 2; j++) {
-      for (int i = 0; i < x.length + 1; i++) {
-	delete[] Kd[j][i];
-      }
-    }
-    for (int i = 0; i < 2; i++) {
-      delete[] Kd[i];
-    }
-
-    return sum;
-  }
-
-};
-
-
 
 struct string_kernel2 {
   typedef float scalar_type;
@@ -386,3 +202,194 @@ class KMerge {
 
 };
 
+struct string_kernel {
+  typedef double scalar_type;
+  typedef std::string sample_type;
+
+  typedef typename dlib::default_memory_manager mem_manager_type;
+
+  string_kernel(const float c, const int normalize, const int symbol_size,
+		const size_t max_length, int kn, double lambda)
+  : _c(c), _normalize(normalize), _symbol_size(symbol_size),
+    _max_length(max_length), _kn(kn), _lambda(lambda),
+    _string_data(0), _kernel(0)
+  {}
+
+  ~string_kernel() {
+    // if _string_data != 0, set size to _string_data->size()
+    // else
+    // use size that was deserialized
+    for (size_t i = 0; i < _string_data->size(); i++)
+      delete[] _kernel[i];
+    delete [] _kernel;
+    delete _string_data;
+  }
+
+  /** Set the dataset to be used by the kernel. */
+  void set_data(const std::vector<std::string> &strings) {
+    assert(strings.size() > 0);
+    _string_data = new DataSet(_max_length, _symbol_size);
+    _string_data->load_strings(strings);
+  }
+
+  /** Calculate the kernel. */
+  void compute_kernel() {
+    assert(_string_data);
+
+    // Initialize kernel 
+    _kernel = new scalar_type *[_string_data->size()];
+    for (size_t i = 0; i < _string_data->size(); i++)
+      _kernel[i] = new scalar_type[_string_data->size()];
+
+    // Start with all K filled with -1, then only calculate kernels as needed 
+    for (size_t i = 0; i < _string_data->size(); i++)
+      for (size_t j = 0; j < _string_data->size(); j++)
+	_kernel[i][j] = -1;
+
+
+    // Get values for normalization, it is computed for elements in diagonal 
+    std::vector<scalar_type> norms(_string_data->size());
+    if (_normalize) {
+      for (size_t i = 0; i < _string_data->size(); i++) {
+	norms[i] = kernel(_string_data->elements()[i], _string_data->elements()[i]);
+	_kernel[i][i] = 1;
+      }
+    }
+
+    // Compute kernel using dynamic programming 
+    run_kernel_dp(norms, _kernel);
+  }
+
+  /** Return pointer to kernel matrix. */
+  scalar_type **values() const {
+    assert(_kernel);
+    return _kernel;
+  }
+
+  void run_kernel_dp(const std::vector<scalar_type> &norms, scalar_type **K) const {
+    assert(_string_data);
+    for (size_t i = 0; i < _string_data->size(); i++) {
+      for (size_t j = 0; j < _string_data->size(); j++) {
+	if (K[j][i] == -1) {
+	  K[j][i] = kernel(_string_data->elements()[j], _string_data->elements()[i]);
+	  if (_normalize)
+	    K[j][i] /= sqrt(norms[i] * norms[j]);
+	  K[i][j] = K[j][i];
+	}
+      }
+    }
+  }
+
+
+  /** Return the size of the NxN kernel. */
+  size_t size() const {
+    // use size struct member if _string_data == 0, remove assert
+    assert(_string_data);
+    return _string_data->size();
+  }
+
+  const float _c;
+  const int _normalize;
+  const int _symbol_size;
+  const size_t _max_length;
+  const int _kn;
+  const double _lambda;
+  DataSet *_string_data;
+  scalar_type **_kernel;
+
+  scalar_type operator() (const sample_type& a, const sample_type& b) const {
+    // convert a -> DataElement x, b -> DataElement y
+    DataElement x, y;
+    size_t str_len = 0;
+    std::string a_rep, b_rep;
+
+    a_rep = (a < KMerge::rev_comp(a)) ? a : KMerge::rev_comp(a);
+    b_rep = (b < KMerge::rev_comp(b)) ? b : KMerge::rev_comp(b);
+
+
+    str_len = a_rep.length();
+    x.allocate(str_len);
+    for (size_t j = 0; j < str_len; j++) {
+      char temp = tolower(*(a_rep.substr(j, 1).c_str()));
+      assert(static_cast<int>(temp) < _symbol_size);
+      x.attributes[j] = static_cast<int>(temp);
+    }
+
+    str_len = b_rep.length();
+    y.allocate(str_len);
+    for (size_t j = 0; j < str_len; j++) {
+      char temp = tolower(*(b_rep.substr(j, 1).c_str()));
+      assert(static_cast<int>(temp) < _symbol_size);
+      y.attributes[j] = static_cast<int>(temp);
+    }
+    
+    return kernel(x, y);
+  }
+
+  scalar_type kernel(const DataElement &x, const DataElement &y) const {
+    scalar_type **Kd[2];
+    for (int i = 0; i < 2; i++) {
+      Kd[i] = new scalar_type *[x.length + 1];
+      for (int j = 0; j < x.length + 1; j++) {
+	Kd[i][j] = new scalar_type[y.length + 1];
+      }
+    }
+
+    // Dynamic programming 
+    for (int i = 0; i < 2; i++) {
+      for (int j = 0; j < (x.length + 1); j++) {
+	for (int k = 0; k < (y.length + 1); k++) {
+	  Kd[i][j][k] = (i + 1) % 2;
+	}
+      }
+    }
+
+    // Calculate Kd and Kdd 
+    for (int i = 1; i <= (_kn - 1); i++) {
+      /* Set the Kd to zero for those lengths of s and t
+	 where s (or t) has exactly length i-1 and t (or s)
+	 has length >= i-1. L-shaped upside down matrix */
+      for (int j = (i - 1); j <= (x.length - 1); j++) {
+	Kd[i % 2][j][i - 1] = 0;
+      }
+      for (int j = (i - 1); j <= (y.length - 1); j++) {
+	Kd[i % 2][i - 1][j] = 0;
+      }
+      for (int j = i; j <= (x.length - 1); j++) {
+	scalar_type Kdd = 0;
+	for (int m = i; m <= (y.length - 1); m++) {
+	  if (x.attributes[j - 1] != y.attributes[m - 1]) {
+	    // ((.))-1 is because indices start with 0 (not with 1)
+	    Kdd = _lambda * Kdd;
+	  } else {
+	    Kdd = _lambda * (Kdd + (_lambda * Kd[(i + 1) % 2][j - 1][m - 1]));
+	  }
+	  Kd[i % 2][j][m] = _lambda * Kd[i % 2][j - 1][m] + Kdd;
+	}
+      }
+    }
+
+    // Calculate K 
+    scalar_type sum = 0;
+    for (int i = _kn; i <= x.length; i++) {
+      for (int j = _kn; j <= y.length; j++) {
+	if (x.attributes[((i)) - 1] == y.attributes[((j)) - 1]) {
+	  sum += _lambda * _lambda * Kd[(_kn - 1) % 2][i - 1][j - 1];
+	}
+      }
+    }
+    
+    // Delete 
+    for (int j = 0; j < 2; j++) {
+      for (int i = 0; i < x.length + 1; i++) {
+	delete[] Kd[j][i];
+      }
+    }
+    for (int i = 0; i < 2; i++) {
+      delete[] Kd[i];
+    }
+
+    return sum;
+  }
+
+};

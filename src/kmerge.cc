@@ -1,4 +1,3 @@
-
 #include "kmerge.h"
 #include "lookup3.c"
 #include "MurmurHash3.h"
@@ -46,12 +45,20 @@ std::string KMerge::rev_comp(const std::string& input) {
   for (std::string::const_reverse_iterator rit=input.rbegin(); rit!=input.rend(); rit++) {
     if (*rit == 'A') {
       output.append("T");
+    } else if (*rit == 'a') {
+      output.append("t");
     } else if (*rit == 'T') {
       output.append("A");
+    } else if (*rit == 't') {
+      output.append("a");
     } else if (*rit == 'G') {
       output.append("C");
+    } else if (*rit == 'g') {
+      output.append("c");
     } else if (*rit == 'C') {
       output.append("G");
+    } else if (*rit == 'c') {
+      output.append("g");
     } else {
       throw "Invalid character in input";
     }
