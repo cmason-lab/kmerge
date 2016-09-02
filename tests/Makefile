@@ -24,8 +24,7 @@ CXX=g++ -std=c++11
 
 # libraries to include
 
-LDFLAGS+=-lm -lrt -lm -lz -lcityhash -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR) -lpthread
-
+LDFLAGS+=-lm -lrt -lm -lz -lcityhash -lpthread -L $(HOME_DIR)/lib -L $(HOME_DIR)/lib64 -L $(DEVELOPMENT_LIB_DIR)
 # House-keeping build targets.
 
 all : $(TESTS)
