@@ -405,13 +405,11 @@ struct string_kernel {
 inline void serialize ( const string_kernel& item, std::ostream& out) {
   size_t size = (item._string_data == 0) ? item._size : item._string_data->size();
   dlib::serialize(size, out);
-  int count = 0;
   for (size_t i = 0; i < size; i++) {
     for (size_t j = 0; j < size; j++) {
       dlib::serialize(item._kernel[i][j], out);
     }
   }
-  std::cout << count << std::endl;
   
   // save the state of the kernel to the output stream
   dlib::serialize(item._c, out);
@@ -423,10 +421,7 @@ inline void serialize ( const string_kernel& item, std::ostream& out) {
 }
 
 inline void deserialize ( string_kernel& item, std::istream& in) {
-  int count = 0;
-  std::cout << "HERE0" << std::endl;
   dlib::deserialize(item._size, in);
-  std::cout << "HERE1" << std::endl;
   item._kernel = new double*[item._size];
   for (size_t i = 0; i < item._size; i++) {
     item._kernel[i] = new double [item._size];
@@ -435,20 +430,10 @@ inline void deserialize ( string_kernel& item, std::istream& in) {
     }
   }
 
-  std::cout << "HERE2" << std::endl;
-
-  // save the state of the kernel to the output stream
   dlib::deserialize(item._c, in);
-  std::cout << item._c << std::endl;
-  std::cout << "HERE3" << std::endl;
   dlib::deserialize(item._normalize, in);
-  std::cout << "HERE4" << std::endl;
   dlib::deserialize(item._symbol_size, in);
-  std::cout << "HERE5" << std::endl;
   dlib::deserialize(item._max_length, in);
-  std::cout << "HERE6" << std::endl;
   dlib::deserialize(item._kn, in);
-  std::cout << "HERE7" << std::endl;
   dlib::deserialize(item._lambda, in);
-  std::cout << "HERE8" << std::endl;
 }
