@@ -5,6 +5,7 @@
 #include "SpookyV2.h"
 #include <dlib/logger.h> 
 #include <dlib/compress_stream.h>
+#include <dlib/serialize.h>
 #include "klib/kseq.h"
 #include <zlib.h>
 #include "cpp-btree/btree_map.h"
@@ -215,11 +216,16 @@ struct string_kernel {
     _string_data(0), _kernel(0)
   {}
 
+  string_kernel()
+  : _c(0), _normalize(0), _symbol_size(0),
+    _max_length(0), _kn(0), _lambda(0),
+    _string_data(0), _kernel(0)
+  {}
+
   ~string_kernel() {
-    // if _string_data != 0, set size to _string_data->size()
-    // else
-    // use size that was deserialized
-    for (size_t i = 0; i < _string_data->size(); i++)
+    size_t size = (_string_data == 0) ? _size : _string_data->size();
+
+    for (size_t i = 0; i < size; i++)
       delete[] _kernel[i];
     delete [] _kernel;
     delete _string_data;
@@ -283,19 +289,21 @@ struct string_kernel {
 
   /** Return the size of the NxN kernel. */
   size_t size() const {
-    // use size struct member if _string_data == 0, remove assert
-    assert(_string_data);
-    return _string_data->size();
+    //assert(_string_data);
+    return (_string_data == 0) ? _size : _string_data->size();
   }
 
-  const float _c;
-  const int _normalize;
-  const int _symbol_size;
-  const size_t _max_length;
-  const int _kn;
-  const double _lambda;
+
+
+  float _c;
+  int _normalize;
+  int _symbol_size;
+  size_t _max_length;
+  int _kn;
+  double _lambda;
   DataSet *_string_data;
   scalar_type **_kernel;
+  size_t _size;
 
   scalar_type operator() (const sample_type& a, const sample_type& b) const {
     // convert a -> DataElement x, b -> DataElement y
@@ -393,3 +401,54 @@ struct string_kernel {
   }
 
 };
+
+inline void serialize ( const string_kernel& item, std::ostream& out) {
+  size_t size = (item._string_data == 0) ? item._size : item._string_data->size();
+  dlib::serialize(size, out);
+  int count = 0;
+  for (size_t i = 0; i < size; i++) {
+    for (size_t j = 0; j < size; j++) {
+      dlib::serialize(item._kernel[i][j], out);
+    }
+  }
+  std::cout << count << std::endl;
+  
+  // save the state of the kernel to the output stream
+  dlib::serialize(item._c, out);
+  dlib::serialize(item._normalize, out);
+  dlib::serialize(item._symbol_size, out);
+  dlib::serialize(item._max_length, out);
+  dlib::serialize(item._kn, out);
+  dlib::serialize(item._lambda, out);
+}
+
+inline void deserialize ( string_kernel& item, std::istream& in) {
+  int count = 0;
+  std::cout << "HERE0" << std::endl;
+  dlib::deserialize(item._size, in);
+  std::cout << "HERE1" << std::endl;
+  item._kernel = new double*[item._size];
+  for (size_t i = 0; i < item._size; i++) {
+    item._kernel[i] = new double [item._size];
+    for (size_t j = 0; j < item._size; j++) {
+      dlib::deserialize(item._kernel[i][j], in);
+    }
+  }
+
+  std::cout << "HERE2" << std::endl;
+
+  // save the state of the kernel to the output stream
+  dlib::deserialize(item._c, in);
+  std::cout << item._c << std::endl;
+  std::cout << "HERE3" << std::endl;
+  dlib::deserialize(item._normalize, in);
+  std::cout << "HERE4" << std::endl;
+  dlib::deserialize(item._symbol_size, in);
+  std::cout << "HERE5" << std::endl;
+  dlib::deserialize(item._max_length, in);
+  std::cout << "HERE6" << std::endl;
+  dlib::deserialize(item._kn, in);
+  std::cout << "HERE7" << std::endl;
+  dlib::deserialize(item._lambda, in);
+  std::cout << "HERE8" << std::endl;
+}

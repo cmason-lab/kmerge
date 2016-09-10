@@ -12,7 +12,7 @@
 #include <iomanip>
 
 
-TEST_CASE("BasicStringKernelTest", "[StringKernel]") {
+TEST_CASE("BasicStringKernelTest", "[SSKernel]") {
   unsigned long long x, y;
   int i, k=5;
   std::vector<std::string> data;
@@ -33,7 +33,7 @@ TEST_CASE("BasicStringKernelTest", "[StringKernel]") {
     if (kmer < rc) data.push_back(kmer);
     kmer.clear();
   }
-
+ 
   // Kernel parameters 
   const float c = 1e12;
   const int normalize = 1;
@@ -51,6 +51,49 @@ TEST_CASE("BasicStringKernelTest", "[StringKernel]") {
   REQUIRE(sk(std::string("AAAAA"), std::string("AAAAA")) == sk(std::string("AAAAA"), std::string("TTTTT")));
     
 }
+
+TEST_CASE("SeralizeSSKernel", "[SSKernel]") {
+  unsigned long long x, y;
+  int i, k=5;
+  std::vector<std::string> data;
+  std::string kmer;
+  uint count = 0;
+  std::ofstream ofile("kernel.bin");
+
+  // only generate the lexicographically ordered k-mers to reduce the total number 
+  // needed in the kernel by 2
+
+  for (x = 0; x < 1ULL<<(2*k); ++x) {
+    for (i = 0, y = x; i < k; ++i, y >>= 2)
+      kmer.push_back("acgt"[y&3]);
+    count++;
+    // get reverse complement of k-mer
+    std::string rc = KMerge::rev_comp(kmer);
+    // check which is lexicographically first
+    // if this is lexicographically first, add k-mer, if not do nothing
+    if (kmer < rc) data.push_back(kmer);
+    kmer.clear();
+  }
+ 
+  // Kernel parameters 
+  const float c = 1e12;
+  const int normalize = 1;
+  const int symbol_size = 255;  // A size of an alphabet
+  const int max_length = 1000;  // A maximum sequence length
+  int kn = 2;                   // A level of susbsequence matching
+  double lambda = 0.5;          // A decay factor
+
+  string_kernel sk(c, normalize, symbol_size, max_length, kn, lambda);
+  sk.set_data(data);
+  sk.compute_kernel();
+  serialize(sk, ofile);
+
+  std::ifstream ifile("kernel.bin");
+  string_kernel sk2;
+  deserialize(sk2, ifile);
+}
+
+
 
 TEST_CASE("GenerateTruncatedHashes", "[KmerGenerator]") {
   std::set<uint> murmur_set;
