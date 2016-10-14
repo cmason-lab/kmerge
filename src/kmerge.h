@@ -400,6 +400,44 @@ struct string_kernel {
     return sum;
   }
 
+  bool operator== (
+        const string_kernel& k
+		   ) const 
+  {
+    if (_c != k._c)
+      return false;
+
+    if (_normalize != k._normalize)
+      return false;
+
+    if (_symbol_size != k._symbol_size)
+      return false;
+
+    if (_max_length != k._max_length)
+      return false;
+
+    if (_kn != k._kn)
+      return false;
+
+    if (_lambda != k._lambda)
+      return false;
+
+    if (_size != k._size)
+      return false;
+
+    for (size_t i = 0; i < _size; i++) {
+      for (size_t j = 0; j < _size; j++) {
+	if (_kernel[i][j] != k._kernel[i][j])
+	  return false;
+      }
+    }
+
+    // everything is equal
+    return true;
+
+  }
+
+
 };
 
 inline void serialize ( const string_kernel& item, std::ostream& out) {
